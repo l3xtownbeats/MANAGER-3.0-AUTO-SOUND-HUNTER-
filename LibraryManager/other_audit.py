@@ -255,6 +255,145 @@ def route_approved_to_other(samples_root: Path, decision_file: Path, *, approve:
             "source_files_deleted": False}
 
 
+def copy_unsupported_to_other(
+    samples_root: Path,
+    *,
+    progress=None,
+    cancel_event=None,
+) -> dict[str, Any]:
+    """Copy objectively unsupported file types from Import to OTHER.
+
+    Audio, SFZ, and known archive formats are never auto-routed here because
+    their relevance cannot be established from the extension alone. Copies
+    are SHA-256 verified, sidecar-provenanced and idempotent. Import originals
+    remain untouched; ambiguous audio stays in Import for human review.
+    """
+    samples_root = Path(samples_root).expanduser().resolve()
+    incoming = samples_root / "Import Sample Guitar"
+    other = samples_root / "OTHER"
+    if not incoming.is_dir():
+        raise FileNotFoundError(f"Import folder not found: {incoming}")
+    other.mkdir(parents=True, exist_ok=True)
+
+    preserved_extensions = set(AUDIO_EXT) | {".sfz", ".zip", ".7z", ".rar"}
+    candidates: list[Path] = []
+    for current, dirs, files in os.walk(incoming):
+        dirs[:] = sorted(
+            name for name in dirs
+            if not name.startswith(".manager-import-tmp-")
+        )
+        for name in sorted(files, key=str.casefold):
+            source = Path(current) / name
+            if source.suffix.lower() not in preserved_extensions:
+                candidates.append(source)
+
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    copied = skipped = 0
+    journal = other / "LibraryManagerReports" / "unsupported_copies.jsonl"
+    for index, source in enumerate(candidates, 1):
+        if cancel_event is not None and cancel_event.is_set():
+            return {
+                "status": "CANCELLED_PARTIAL",
+                "candidates_seen": index - 1,
+                "copied_count": copied,
+                "already_present_count": skipped,
+                "errors": errors,
+                "results": results,
+                "source_files_modified": False,
+            }
+        try:
+            if not _inside(source, incoming) or not source.is_file():
+                raise ValueError("Source must be an existing file inside Import Sample Guitar")
+            relative = source.relative_to(incoming)
+            destination = (other / relative).resolve()
+            if not _inside(destination, other):
+                raise ValueError(f"OTHER destination escaped its root: {destination}")
+            digest = _hash(source)
+            sidecar = destination.with_suffix(destination.suffix + ".json")
+
+            if destination.exists() or sidecar.exists():
+                if destination.is_file() and sidecar.is_file():
+                    prior = json.loads(sidecar.read_text(encoding="utf-8"))
+                    existing_hash = _hash(destination)
+                    if (
+                        existing_hash == digest
+                        and prior.get("source_sha256") == digest
+                        and prior.get("distribution_status") == "VERIFIED_COPIED_TO_OTHER"
+                    ):
+                        skipped += 1
+                        results.append({
+                            "source_path": str(source),
+                            "destination_path": str(destination),
+                            "sha256": digest,
+                            "status": "ALREADY_PRESENT_VERIFIED",
+                        })
+                        continue
+                raise FileExistsError(f"Refusing to overwrite conflicting OTHER destination: {destination}")
+
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            created_audio = False
+            try:
+                with source.open("rb") as src, destination.open("xb") as dst:
+                    created_audio = True
+                    shutil.copyfileobj(src, dst, 1024 * 1024)
+                copied_hash = _hash(destination)
+                if copied_hash != digest:
+                    raise IOError("OTHER copy SHA-256 mismatch")
+                record = {
+                    "source_path": str(source),
+                    "destination_path": str(destination),
+                    "relative_path": relative.as_posix(),
+                    "asset_id": digest[:24],
+                    "source_sha256": digest,
+                    "destination_sha256": copied_hash,
+                    "distribution_status": "VERIFIED_COPIED_TO_OTHER",
+                    "route_reason": "UNSUPPORTED_FILE_TYPE",
+                    "review_status": "NOT_APPLICABLE_TO_NON_AUDIO_FILE",
+                    "license_status": "NOT_ASSESSED",
+                    "source_preserved": True,
+                    "copied_at_utc": datetime.now(timezone.utc).isoformat(),
+                }
+                with sidecar.open("x", encoding="utf-8") as stream:
+                    json.dump(record, stream, ensure_ascii=False, indent=2)
+                    stream.write("\\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                with journal.open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps({"event": "COPIED_UNSUPPORTED_TO_OTHER", **record}, ensure_ascii=False) + "\\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                copied += 1
+                results.append({**record, "status": "COPIED_VERIFIED"})
+            except Exception:
+                sidecar.unlink(missing_ok=True)
+                if created_audio:
+                    destination.unlink(missing_ok=True)
+                raise
+        except Exception as exc:
+            errors.append({
+                "source_path": str(source),
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+        if progress and (index == 1 or index % 25 == 0 or index == len(candidates)):
+            progress(
+                f"OTHER: проверено неподдерживаемых файлов {index}/{len(candidates)}; "
+                f"скопировано {copied}; уже проверено {skipped}; ошибок {len(errors)}."
+            )
+
+    status = "COPIED_WITH_ERRORS" if errors else "COPIED_VERIFIED"
+    return {
+        "status": status if candidates else "NO_UNSUPPORTED_FILES",
+        "candidates_seen": len(candidates),
+        "copied_count": copied,
+        "already_present_count": skipped,
+        "error_count": len(errors),
+        "errors": errors,
+        "results": results,
+        "source_files_modified": False,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit OTHER and prepare safe, approval-gated routing.")
     parser.add_argument("--samples", type=Path, required=True)
