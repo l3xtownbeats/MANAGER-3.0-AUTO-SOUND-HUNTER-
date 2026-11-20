@@ -511,8 +511,8 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
                             )
                             cache_status = "REBUILT_CORRUPT_ENTRY"
                     else:
-                        decoded = read_mono_pcm(path, max_samples=90_000)
-                        acoustic = analyse_wav(path, max_samples=90_000, decoded=decoded)
+                        decoded = read_mono_pcm(path, max_samples=AUDIO_ANALYSIS_SAMPLE_LIMIT)
+                        acoustic = analyse_wav(path, max_samples=AUDIO_ANALYSIS_SAMPLE_LIMIT, decoded=decoded)
                         classification = classify_wav(
                             path, analyze_pitch=True, max_samples=90_000, decoded=decoded
                         )
