@@ -33,14 +33,14 @@ class NeonStageThemeTests(unittest.TestCase):
                 self.assertRegex(value, re.compile(r"^#[0-9A-Fa-f]{6}$"))
 
     def test_exact_ppgu_neon_stage_signature(self) -> None:
-        self.assertEqual(NEON_STAGE_PALETTE["window_bg"], "#000612")
-        self.assertEqual(NEON_STAGE_PALETTE["panel"], "#010B1C")
-        self.assertEqual(NEON_STAGE_PALETTE["accent"], "#075CE8")
-        self.assertEqual(NEON_STAGE_PALETTE["accent_glow"], "#00BFFF")
-        self.assertEqual(NEON_STAGE_PALETTE["accent_purple"], "#7115B8")
-        self.assertEqual(NEON_STAGE_PALETTE["accent_magenta"], "#E51BD4")
-        self.assertEqual(NEON_STAGE_PALETTE["lcd_bg"], "#02091E")
-        self.assertEqual(NEON_STAGE_PALETTE["lcd_text"], "#8CEAFF")
+        self.assertEqual(NEON_STAGE_PALETTE["window_bg"], "#0b0b0d")
+        self.assertEqual(NEON_STAGE_PALETTE["panel"], "#121216")
+        self.assertEqual(NEON_STAGE_PALETTE["accent"], "#b300ff")
+        self.assertEqual(NEON_STAGE_PALETTE["accent_glow"], "#d45cff")
+        self.assertEqual(NEON_STAGE_PALETTE["accent_purple"], "#8d16c5")
+        self.assertEqual(NEON_STAGE_PALETTE["accent_magenta"], "#e044ff")
+        self.assertEqual(NEON_STAGE_PALETTE["lcd_bg"], "#09090c")
+        self.assertEqual(NEON_STAGE_PALETTE["lcd_text"], "#efcaff")
         self.assertTrue(NEON_STAGE_THEME["reduceInEco"])
         self.assertNotEqual(NEON_STAGE_PALETTE["accent"], "#D5FF45")
         self.assertNotEqual(NEON_STAGE_PALETTE["accent_glow"], "#DEFF6E")
@@ -83,10 +83,10 @@ class NeonStageThemeTests(unittest.TestCase):
             "Treeview", "Treeview.Heading", "TScrollbar",
         ):
             self.assertIn(widget_style, style.configured)
-        self.assertEqual(style.configured["TFrame"]["background"], "#010B1C")
-        self.assertEqual(style.configured["TLabel"]["foreground"], "#F3F7FF")
-        self.assertEqual(style.configured["Treeview"]["fieldbackground"], "#000A1E")
-        self.assertEqual(style.configured["Treeview.Heading"]["background"], "#06152E")
+        self.assertEqual(style.configured["TFrame"]["background"], "#121216")
+        self.assertEqual(style.configured["TLabel"]["foreground"], "#e0e0e0")
+        self.assertEqual(style.configured["Treeview"]["fieldbackground"], "#0f0f11")
+        self.assertEqual(style.configured["Treeview.Heading"]["background"], "#191920")
         self.assertIn("TButton", style.mapped)
         self.assertIn("Treeview", style.mapped)
 
