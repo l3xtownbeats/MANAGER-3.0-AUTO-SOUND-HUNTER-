@@ -66,7 +66,7 @@ class RuntimePathTests(unittest.TestCase):
 
             def probe(path):
                 calls.append(path)
-                if path == exe.parent / "UserData":
+                if path.resolve() == (exe.parent / "UserData").resolve():
                     return False
                 path.mkdir(parents=True, exist_ok=True)
                 return True
@@ -108,7 +108,7 @@ class RuntimePathTests(unittest.TestCase):
                 exe, executable=exe, frozen=True,
                 environ={},
             )
-            self.assertEqual(bundle, exe.parent)
+            self.assertEqual(bundle.resolve(), exe.parent.resolve())
             self.assertEqual(data.resolve(), (exe.parent / "UserData").resolve())
             self.assertTrue(portable)
 
