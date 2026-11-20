@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from performance_profile import (
@@ -30,7 +31,7 @@ class PerformanceProfileTests(unittest.TestCase):
         self.assertEqual(AUDIO_ANALYSIS_SAMPLE_LIMIT, 90_000)
 
     def test_fallback_cache_folder_is_created(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"LOCALAPPDATA": ""}):
             root = Path(tmp) / "reports"
             result = resolve_fast_cache_dir(root)
             self.assertEqual(result, root.resolve())
