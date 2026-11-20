@@ -1143,3 +1143,15 @@ PPGU использует собственный визуальный язык �
 - GUI `APP_VERSION`, unified manager `VERSION` и Inno Setup `MyAppVersion` выровнены на `3.0.0`. Добавлен `V3_0_RELEASE_NOTES_RU.md`; README обновлены. Кодовые алгоритмы при version bump не менялись.
 - После изменения версии и release documentation выполняется повторный Linux/Windows exact-head CI. Только артефакты, произведённые успешным post-bump CI, могут считаться финальными 3.0.0 downloads.
 - Граница acceptance: CI использует regression fixtures. Проверка с реальной пользовательской папкой Samples, прослушивание конкретной библиотеки и подтверждение её лицензий остаются отдельной операторской приёмкой; никакой не проверенный asset не становится READY автоматически.
+
+## Запись TJ-2026-11-20-MANAGER-3.0.0-ACCEPTANCE-040 — автоматическая приёмка versioned 3.0.0
+
+- Дата: 2026-11-20
+- Тип: **ФАКТИЧЕСКАЯ ЗАПИСЬ О RELEASE ACCEPTANCE**
+- Versioned code commit: 414df7bf92fd9d44ebcc357702c03388c72316b0; GUI APP_VERSION, unified_manager VERSION и Inno Setup MyAppVersion синхронно равны 3.0.0.
+- Linux Library Manager Tests run 44730743388: 239 tests, OK.
+- Windows Library Manager Package run 44730743351: 239 tests, OK; PyInstaller Portable build, bundled runtime/theme validation, Portable startup + UserData, ZIP integrity/content checks, Inno Setup compile, silent installation, installed app startup, отсутствие portable.mode в installed package и LocalAppData data-root check — SUCCESS.
+- Финальные versioned Windows artifacts: Portable ZIP artifact 14626665812 (26,661,010 bytes); Installer EXE artifact 14626740494 (19,963,433 bytes).
+- Release notes: LibraryManager/V3_0_RELEASE_NOTES_RU.md. Корневой README содержит точные ссылки на Linux/Windows Actions.
+- Граница проверки: автоматические CI/Windows build и smoke gates закрыты. Проверка реальной пользовательской Samples-библиотеки, прослушивание конкретных материалов и подтверждение лицензий остаются operator-side acceptance; ни один непроверенный asset не продвигается в READY/FACTORY автоматически.
+- Перед merge и указанием release/3.0-final выполняется заключительный exact-head workflow после обновления release documentation/journal.
