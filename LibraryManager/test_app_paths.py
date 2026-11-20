@@ -25,7 +25,7 @@ class RuntimePathTests(unittest.TestCase):
             bundle, data, portable = resolve_runtime_paths(
                 exe, executable=exe, frozen=True, environ={}
             )
-            self.assertEqual(bundle, Path(directory))
+            self.assertEqual(bundle.resolve(), Path(directory).resolve())
             self.assertEqual(data.resolve(), (Path(directory) / "UserData").resolve())
             self.assertTrue(portable)
 
@@ -76,7 +76,7 @@ class RuntimePathTests(unittest.TestCase):
                 environ={"LOCALAPPDATA": str(local)},
                 writable_probe=probe,
             )
-            self.assertEqual(bundle, exe.parent)
+            self.assertEqual(bundle.resolve(), exe.parent.resolve())
             self.assertEqual(
                 data.resolve(),
                 (local / APP_FOLDER_NAME / "PortableFallback" / "portable-profile-123").resolve(),
