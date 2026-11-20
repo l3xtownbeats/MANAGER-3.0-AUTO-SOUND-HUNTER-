@@ -1244,7 +1244,7 @@ class LibraryManagerApp:
 
     def _progress(self, message: str) -> None:
         self._scan_progress_message.set(message[:180])
-        match = re.search(r"Обработка:\\s*([\\d,]+)\\s*/\\s*([\\d,]+)", message)
+        match = re.search(r"Обработка:\s*([\d,]+)\s*/\s*([\d,]+)", message)
         if match:
             completed = int(match.group(1).replace(",", ""))
             total = max(1, int(match.group(2).replace(",", "")))
