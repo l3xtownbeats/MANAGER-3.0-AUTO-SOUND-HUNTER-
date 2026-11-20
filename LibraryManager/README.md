@@ -15,9 +15,9 @@ Do not reinterpret, redesign, replace, or remove a baseline decision without the
 >
 > This boundary must not be changed without the user's explicit approval.
 
-## Manager 3.0.0 — six primary dashboard actions and supporting tools
+## Manager 3.0.0 — two primary dashboard actions and six preserved workflow stages
 
-This release line contains the six-stage Manager workflow: IMPORT GUITAR, SCAN LIBRARY, START HUNTING, REVIEW QUEUE, BUILD LIBRARY and VERIFY / RECOVERY. Source audio remains read-only during import, scan and analysis; approved Factory distribution is a separate, explicit, verified copy operation.
+The NEON STAGE home screen presents exactly two primary operations: **IMPORT SAMPLE GUITAR** and **START SCAN HUNTING**. The complete six-stage workflow remains available through the matching menus: IMPORT GUITAR, SCAN LIBRARY, START HUNTING, REVIEW QUEUE, BUILD LIBRARY and VERIFY / RECOVERY. Secondary tools remain available; they are not removed or reduced to mock controls. Source audio remains read-only during import, scan and analysis; approved Factory distribution is a separate, explicit, verified copy operation.
 
 ### Required library layout
 
@@ -512,3 +512,20 @@ The manual review dialog now records explicit technique tags (Downstroke, Upstro
 - Inaccessible nested folders, locked files and unreadable Factory directories are recorded and do not silently turn a partial scan into a successful complete scan.
 
 The Windows delivery workflow produces two distinct packages: Portable ZIP and Inno Setup installer EXE. Both package paths now have successful Windows startup smoke tests. See [V3_0_RELEASE_NOTES_RU.md](V3_0_RELEASE_NOTES_RU.md) for the exact CI runs, artifact links and remaining operator-side acceptance boundary.
+
+
+## NEON STAGE visual and performance profile
+
+The Manager dashboard uses the approved VST-inspired NEON STAGE visual direction: a dark metallic console, electric-blue / cyan / purple / magenta accents, the bundled guitar hero artwork, raised framed operation panels, live scan telemetry and the persistent activity console. The home screen has exactly two primary operation cards; all review, build, scan-only, audit and recovery tools remain in the menus.
+
+The target performance profile for the i3-5005U / 4-logical-processor / 8-GB system is:
+- Windows per-process ceiling: **70% CPU** and **5 GB RAM**, applied with a Windows Job Object when the host permits it.
+- File-level scan concurrency: **up to 2 files**, avoiding excessive random seeks on one mechanical HDD.
+- SHA-256 input blocks: **4 MiB**.
+- Audio decode blocks: **131,072 frames**.
+- Acoustic RMS / zero-crossing and WAV-range frame analysis use NumPy vector operations.
+- A single decoded WAV sample buffer is shared across acoustic, classification and pitch analysis.
+- Scan cache is placed under LocalAppData on Windows (normally the system SSD); reports and user data retain their existing paths.
+- Progress reports include a heartbeat and the active filename while a long file is being processed.
+
+The CPU and RAM ceilings are real Windows Job Object limits only when Windows accepts assignment of the process. If a parent job or host policy prevents assignment, NEON STAGE logs that fact and continues with the bounded two-worker profile. The scan never drops SHA-256, acoustic analysis, pitch evidence, license review or the FACTORY approval gate to gain speed. The 5-GB value is a ceiling, not a requirement to allocate that much memory.
