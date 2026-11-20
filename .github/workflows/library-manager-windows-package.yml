@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - "release/3.0-final"
+      - "integration/manager-3.0-clean"
     paths:
       - "LibraryManager/**"
       - ".github/workflows/library-manager-windows-package.yml"
