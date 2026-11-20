@@ -55,8 +55,8 @@ class LibraryManagerApp:
         self.root = root
         self.dialogs = NeonStageDialogs(root, NEON_STAGE_THEME["palette"])
         self.root.title(f"POP PUNK GUITAR LIBRARY MANAGER {APP_VERSION}")
-        self.root.geometry("980x680")
-        self.root.minsize(760, 520)
+        self.root.geometry("1366x768")
+        self.root.minsize(1080, 680)
         self._settings_path = MANAGER_DIR / "manager_settings.json"
         self._saved_settings = self._load_saved_settings()
         self.samples_root = tk.StringVar(value=self._saved_settings.get("samples_root", DEFAULT_SAMPLES))
@@ -112,8 +112,8 @@ class LibraryManagerApp:
         red = "#FF597C"
 
         self.root.title(f"POP PUNK GUITAR  •  NEON STAGE DEFAULT / SKIN-1  •  MANAGER {APP_VERSION}")
-        self.root.geometry("1500x940")
-        self.root.minsize(1160, 760)
+        self.root.geometry("1366x768")
+        self.root.minsize(1080, 680)
         self.root.configure(bg=bg)
 
         style = ttk.Style(self.root)
@@ -244,7 +244,7 @@ class LibraryManagerApp:
         workspace.pack(fill="both", expand=True, padx=7, pady=(0, 6))
 
         # LEFT RACK — source location, import guarantees and destination map.
-        left = tk.Frame(workspace, bg=bg, width=250)
+        left = tk.Frame(workspace, bg=bg, width=224)
         left.pack(side="left", fill="y", padx=(0, 6))
         left.pack_propagate(False)
 
@@ -412,7 +412,7 @@ class LibraryManagerApp:
             button = NeonActionButton(
                 card, title, command,
                 subtitle=subtitle, icon=icon, accent=accent,
-                variant=variant, width=420, height=92,
+                variant=variant, width=360, height=78,
             )
             button.pack(fill="x")
             self._action_buttons.append(button)
@@ -421,7 +421,7 @@ class LibraryManagerApp:
         # The main action area intentionally contains exactly two large buttons.
 
         # RIGHT RACK — live task state and the review gate; no simulated meters.
-        right = tk.Frame(workspace, bg=bg, width=290)
+        right = tk.Frame(workspace, bg=bg, width=264)
         right.pack(side="left", fill="y")
         right.pack_propagate(False)
 
@@ -518,7 +518,7 @@ class LibraryManagerApp:
         log_frame = tk.Frame(log_panel.body, bg="#000817")
         log_frame.pack(fill="both", expand=True)
         self.log = tk.Text(
-            log_frame, wrap="word", height=6, font=("Consolas", 8),
+            log_frame, wrap="word", height=4, font=("Consolas", 8),
             bg="#000817", fg="#9DEFFF", insertbackground=cyan,
             selectbackground="#164C87", relief="sunken", bd=2,
             padx=9, pady=7, borderwidth=2, highlightthickness=1,
