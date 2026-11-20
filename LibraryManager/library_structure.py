@@ -36,6 +36,14 @@ TECHNIQUES = (
     "PINCH_HARMONIC", "TREMOLO", "CHOKE", "LET_RING", "DEAD_NOTE",
 )
 VELOCITY_LAYERS = ("LOW", "MEDIUM", "HIGH")
+PATTERN_SELECTOR_LAYOUT = (
+    ("C1", "Pop Punk Downstroke"),
+    ("C#1", "Palm Mute 8th Notes"),
+    ("D1", "Power Chord Rhythm"),
+    ("D#1", "Punk Rock Rhythm"),
+    ("E1", "Fast Downstroke"),
+    ("F1", "Alternative Punk Rhythm"),
+)
 
 
 def _as_int(value: Any, low: int = 0, high: int = 127) -> int | None:
@@ -165,6 +173,7 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
     pitch_coverage = {str(pc): [] for pc in range(12)}
     velocity_coverage = {layer: [] for layer in VELOCITY_LAYERS}
     pattern_records = []
+    pattern_performance_records = []
     melody_records = []
 
     for mode in MODES:
@@ -237,12 +246,18 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
                     "note_event", "sample_note_candidate", "sample_note", "one_shot_sample"
                 }
                 if is_note_zone:
-                    state = "NOTE_ZONE_READY" if pitches and asset.get("asset_file") else "NOTE_ZONE_INCOMPLETE"
-                    missing = [] if pitches and asset.get("asset_file") else [
-                        field for field, ok in (("confirmed_pitch_zone", bool(pitches)),
-                                                ("derived_wav_reference", bool(asset.get("asset_file"))))
-                        if not ok
-                    ]
+                    missing = []
+                    if not pitches:
+                        missing.append("confirmed_pitch_zone")
+                    if not asset.get("asset_file"):
+                        missing.append("derived_wav_reference")
+                    if asset.get("review_status") != "REVIEWED":
+                        missing.append("explicit_musical_review")
+                    if asset.get("license_status") != "LICENSE_APPROVED":
+                        missing.append("explicit_license_approval")
+                    if asset.get("integrity_status") != "VERIFIED":
+                        missing.append("sha256_integrity")
+                    state = "NOTE_ZONE_READY" if not missing else "NOTE_ZONE_INCOMPLETE"
                     pattern_records.append({
                         "asset_id": asset_id, "asset_kind": asset_kind,
                         "pattern_structure_status": state, "missing_fields": missing,
@@ -251,6 +266,15 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
                     })
                 else:
                     state, missing = _pattern_readiness(metadata, asset.get("frame_count"))
+                    if asset.get("review_status") != "REVIEWED":
+                        missing.append("explicit_musical_review")
+                    if asset.get("license_status") != "LICENSE_APPROVED":
+                        missing.append("explicit_license_approval")
+                    if asset.get("integrity_status") != "VERIFIED":
+                        missing.append("sha256_integrity")
+                    if not asset.get("asset_file"):
+                        missing.append("derived_wav_reference")
+                    state = "STRUCTURE_VERIFIED" if not missing else "INCOMPLETE"
                     pattern_records.append({
                         "asset_id": asset_id, "asset_kind": asset_kind or "UNKNOWN",
                         "pattern_structure_status": state, "missing_fields": missing,
@@ -258,11 +282,47 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
                         "metadata": metadata.get("pattern_performance_review") or metadata.get("pattern") or {},
                     })
             if mode == "MELODY MODE":
-                state, missing = _melody_readiness(asset, metadata)
-                melody_records.append({"asset_id": asset_id, "melody_structure_status": state,
-                                       "missing_fields": missing,
-                                       "confirmed_note_sequence": asset.get("confirmed_note_sequence") or [],
-                                       "confirmed_melody_events": metadata.get("confirmed_melody_events") or []})
+                asset_kind = str(asset.get("kind") or "").casefold()
+                if asset_kind in {"melody_single_note_candidate", "sample_note_candidate",
+                                  "sample_note", "note_event", "one_shot_sample"}:
+                    missing = []
+                    if not pitches:
+                        missing.append("confirmed_midi_note_or_note_zone")
+                    if not asset.get("asset_file"):
+                        missing.append("derived_wav_reference")
+                    if asset.get("review_status") != "REVIEWED":
+                        missing.append("explicit_musical_review")
+                    if asset.get("license_status") != "LICENSE_APPROVED":
+                        missing.append("explicit_license_approval")
+                    if asset.get("integrity_status") != "VERIFIED":
+                        missing.append("sha256_integrity")
+                    state = "NOTE_ZONE_READY" if not missing else "NOTE_ZONE_INCOMPLETE"
+                    melody_records.append({
+                        "asset_id": asset_id, "asset_kind": asset_kind,
+                        "melody_structure_status": state,
+                        "missing_fields": missing,
+                        "confirmed_pitches": pitches,
+                        "velocity_zone": velocity,
+                        "reviewed_techniques": techniques,
+                    })
+                else:
+                    state, missing = _melody_readiness(asset, metadata)
+                    if asset.get("review_status") != "REVIEWED":
+                        missing.append("explicit_musical_review")
+                    if asset.get("license_status") != "LICENSE_APPROVED":
+                        missing.append("explicit_license_approval")
+                    if asset.get("integrity_status") != "VERIFIED":
+                        missing.append("sha256_integrity")
+                    if not asset.get("asset_file"):
+                        missing.append("derived_wav_reference")
+                    state = "STRUCTURE_VERIFIED" if not missing else "INCOMPLETE"
+                    melody_records.append({
+                        "asset_id": asset_id, "asset_kind": asset_kind,
+                        "melody_structure_status": state,
+                        "missing_fields": missing,
+                        "confirmed_note_sequence": asset.get("confirmed_note_sequence") or [],
+                        "confirmed_melody_events": metadata.get("confirmed_melody_events") or [],
+                    })
 
         mode_rows.append({
             "mode": mode,
@@ -274,6 +334,60 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
             "integrity_blocked_count": sum(1 for item in rows if item["status"] == "INTEGRITY_BLOCKED"),
             "assets": rows,
         })
+
+    for asset in catalog.get("pattern_instrument_assets", []):
+        asset_id = str(asset.get("asset_id") or "")
+        if not asset_id:
+            continue
+        metadata = asset.get("musical_metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        approved_evidence = (
+            asset.get("review_status") == "REVIEWED"
+            and asset.get("license_status") == "LICENSE_APPROVED"
+            and asset.get("integrity_status") == "VERIFIED"
+        )
+        techniques = _reviewed_techniques(asset, metadata) if approved_evidence else []
+        pitches = _pitch_records(asset, metadata) if approved_evidence else []
+        velocity = _velocity_record(asset, metadata) if approved_evidence else {
+            "status": "UNKNOWN", "min": None, "max": None, "layer": "UNKNOWN"
+        }
+        state, missing = _pattern_readiness(metadata, asset.get("frame_count"))
+        if asset.get("review_status") != "REVIEWED":
+            missing.append("explicit_musical_review")
+        if asset.get("license_status") != "LICENSE_APPROVED":
+            missing.append("explicit_license_approval")
+        if asset.get("integrity_status") != "VERIFIED":
+            missing.append("sha256_integrity")
+        if not asset.get("asset_file"):
+            missing.append("derived_wav_reference")
+        state = "STRUCTURE_VERIFIED" if not missing else "INCOMPLETE"
+        pattern_performance_records.append({
+            "asset_id": asset_id,
+            "asset_kind": asset.get("kind", "rhythm_pattern"),
+            "asset_file": asset.get("asset_file"),
+            "manifest_file": asset.get("manifest_file"),
+            "review_status": asset.get("review_status", "NEEDS_MUSICAL_REVIEW"),
+            "license_status": asset.get("license_status", "UNREVIEWED"),
+            "integrity_status": asset.get("integrity_status", "UNKNOWN"),
+            "pattern_structure_status": state,
+            "missing_fields": missing,
+            "confirmed_pitches": pitches,
+            "reviewed_techniques": techniques,
+            "velocity_zone": velocity,
+            "metadata": metadata.get("pattern_performance_review") or metadata.get("pattern") or {},
+            "selector_key": metadata.get("confirmed_pattern_selector_key"),
+        })
+        global_assets.setdefault(asset_id, {
+            "asset_id": asset_id, "asset_file": asset.get("asset_file"),
+            "kind": asset.get("kind", "rhythm_pattern"),
+        })
+        for pitch in pitches:
+            pitch_coverage[str(pitch["pitch_class"])].append(asset_id)
+        if velocity["layer"] in velocity_coverage:
+            velocity_coverage[velocity["layer"]].append(asset_id)
+        for technique in techniques:
+            technique_coverage[technique].append(asset_id)
 
     for bucket in (pitch_coverage, velocity_coverage, technique_coverage):
         for key, asset_ids in bucket.items():
@@ -309,22 +423,41 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
                             "status": "COVERED" if ids else "GAP"} for technique, ids in technique_coverage.items()],
         },
         "pattern_mode": {
-            "asset_count": len(pattern_records),
-            "structure_verified_count": sum(x["pattern_structure_status"] == "STRUCTURE_VERIFIED" for x in pattern_records),
+            "asset_count": len(pattern_records) + len(pattern_performance_records),
+            "note_zone_count": sum(x["asset_kind"] in {"note_event", "sample_note_candidate", "sample_note", "one_shot_sample"} for x in pattern_records),
             "note_zone_ready_count": sum(x["pattern_structure_status"] == "NOTE_ZONE_READY" for x in pattern_records),
             "note_zone_incomplete_count": sum(x["pattern_structure_status"] == "NOTE_ZONE_INCOMPLETE" for x in pattern_records),
-            "assets": pattern_records,
+            "performance_count": len(pattern_performance_records),
+            "performance_structure_verified_count": sum(x["pattern_structure_status"] == "STRUCTURE_VERIFIED" for x in pattern_performance_records),
+            "performance_structure_incomplete_count": sum(x["pattern_structure_status"] == "INCOMPLETE" for x in pattern_performance_records),
+            "structure_verified_count": (
+                sum(x["pattern_structure_status"] == "STRUCTURE_VERIFIED" for x in pattern_records)
+                + sum(x["pattern_structure_status"] == "STRUCTURE_VERIFIED" for x in pattern_performance_records)
+            ),
+            "selector_layout": [
+                {"selector_key": key, "pattern_name": name,
+                 "status": "APPROVED_INITIAL_LAYOUT",
+                 "host_octave_calibration_required": True}
+                for key, name in PATTERN_SELECTOR_LAYOUT
+            ],
+            "note_zones": pattern_records,
+            "performances": pattern_performance_records,
         },
         "melody_mode": {
             "asset_count": len(melody_records),
+            "note_zone_count": sum(x.get("asset_kind") in {"melody_single_note_candidate", "sample_note_candidate", "sample_note", "note_event", "one_shot_sample"} for x in melody_records),
+            "note_zone_ready_count": sum(x["melody_structure_status"] == "NOTE_ZONE_READY" for x in melody_records),
+            "note_zone_incomplete_count": sum(x["melody_structure_status"] == "NOTE_ZONE_INCOMPLETE" for x in melody_records),
+            "phrase_count": sum(x.get("asset_kind") not in {"melody_single_note_candidate", "sample_note_candidate", "sample_note", "note_event", "one_shot_sample"} for x in melody_records),
             "structure_verified_count": sum(x["melody_structure_status"] == "STRUCTURE_VERIFIED" for x in melody_records),
             "assets": melody_records,
         },
         "summary": {
             "unique_asset_count": len(global_assets),
-            "mode_assignment_count": sum(item["asset_count"] for item in mode_rows),
+            "mode_assignment_count": sum(item["asset_count"] for item in mode_rows) + len(pattern_performance_records),
             "multi_mode_asset_count": sum(1 for asset_id in global_assets
-                                          if sum(asset_id in {x["asset_id"] for x in row["assets"]} for row in mode_rows) > 1),
+                                          if sum(asset_id in {x["asset_id"] for x in row["assets"]} for row in mode_rows)
+                                          + sum(1 for x in pattern_performance_records if x["asset_id"] == asset_id) > 1),
             "runtime_ready_assignment_count": sum(item["runtime_ready_count"] for item in mode_rows),
             "pattern_structure_verified_count": sum(x["pattern_structure_status"] == "STRUCTURE_VERIFIED" for x in pattern_records),
             "melody_structure_verified_count": sum(x["melody_structure_status"] == "STRUCTURE_VERIFIED" for x in melody_records),
