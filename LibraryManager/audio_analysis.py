@@ -110,6 +110,38 @@ def _autocorrelation_pitch(samples, rate):
     names=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
     return {"frequency_hz":round(hz,2),"midi_note":midi,"note_name":names[midi%12]+str(midi//12-1),"confidence":round(min(1.,best),3)}
 
+def frame_statistics(samples, frame: int, hop: int):
+    """Return RMS and zero-crossing arrays using NumPy's native vector loops."""
+    if frame <= 0 or hop <= 0:
+        raise ValueError("Frame and hop sizes must be positive")
+    try:
+        import numpy as np
+        signal = np.asarray(samples, dtype=np.float32)
+        if len(signal) < frame:
+            return [], []
+        windows = np.lib.stride_tricks.sliding_window_view(signal, frame)[::hop]
+        rms = np.sqrt(
+            np.einsum("ij,ij->i", windows, windows, dtype=np.float64) / frame
+        )
+        crossings = np.count_nonzero(
+            (windows[:, :-1] < 0) != (windows[:, 1:] < 0), axis=1
+        )
+        zcr = crossings / max(1, frame - 1)
+        return rms.tolist(), zcr.tolist()
+    except ImportError:
+        rms, zcr = [], []
+        for start in range(0, max(1, len(samples) - frame + 1), hop):
+            chunk = samples[start:start + frame]
+            if len(chunk) < frame:
+                break
+            rms.append(math.sqrt(sum(v * v for v in chunk) / frame))
+            zcr.append(
+                sum(1 for a, b in zip(chunk, chunk[1:]) if (a < 0) != (b < 0))
+                / max(1, frame - 1)
+            )
+        return rms, zcr
+
+
 def analyse_wav(path: Path, frame_ms: int = 20, hop_ms: int = 10,
                 max_samples: int = 90_000, decoded=None) -> dict:
     """Analyze a bounded, decimated mono view.
@@ -124,13 +156,8 @@ def analyse_wav(path: Path, frame_ms: int = 20, hop_ms: int = 10,
     fmt, subtype, backend = _audio_metadata(Path(path))
     if rate <= 0 or not samples: raise ValueError("Empty or invalid audio")
     frame=max(32,round(rate*frame_ms/1000/decimation)); hop=max(1,round(rate*hop_ms/1000/decimation))
-    rms,zcr,times=[],[],[]
-    for start in range(0,max(1,len(samples)-frame+1),hop):
-        chunk=samples[start:start+frame]
-        if len(chunk)<frame: break
-        rms.append(math.sqrt(sum(v*v for v in chunk)/frame))
-        zcr.append(sum(1 for a,b in zip(chunk,chunk[1:]) if (a<0)!=(b<0))/max(1,frame-1))
-        times.append(start*decimation/rate)
+    rms,zcr=frame_statistics(samples,frame,hop)
+    times=[start*decimation/rate for start in range(0,max(1,len(samples)-frame+1),hop)][:len(rms)]
     if not rms: rms,zcr,times=[0.],[0.],[0.]
     peak=max((abs(v) for v in samples),default=0.); mean_rms=statistics.fmean(rms)
     onset=[max(0.,rms[i]-rms[i-1]) for i in range(1,len(rms))]
