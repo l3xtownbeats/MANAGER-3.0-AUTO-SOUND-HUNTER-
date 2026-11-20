@@ -382,8 +382,8 @@ class LibraryManagerApp:
         self._action_buttons = []
         for index, (number, title, description, command, tag, edge, button_text) in enumerate(primary_operations):
             card = tk.Frame(
-                cards, bg=panel, highlightbackground=border,
-                highlightthickness=2, padx=18, pady=16,
+                cards, bg=panel, highlightbackground=palette["highlight"],
+                highlightthickness=2, bd=2, relief="ridge", padx=18, pady=16,
             )
             card.grid(row=0, column=index, sticky="nsew", padx=6, pady=5)
             tk.Frame(card, bg=edge, height=4).pack(fill="x", pady=(0, 12))
@@ -741,11 +741,7 @@ class LibraryManagerApp:
             self._error(title, exc, details)
 
     def _queue_progress(self, message: str) -> None:
-        """Persist worker progress and forward it to the Tk main thread."""
-        task_id = self._active_task_id
-        task = self._active_task_title
-        if task_id and task:
-            self._task_journal.progress(task_id, task, message)
+        """Forward worker progress; the Tk thread persists each event once."""
         self._worker_events.put(("progress", message))
 
     def _poll_worker_events(self) -> None:
