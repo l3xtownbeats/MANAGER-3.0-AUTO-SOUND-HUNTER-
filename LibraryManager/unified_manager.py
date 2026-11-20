@@ -19,7 +19,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
 
-from audio_analysis import analyse_wav
+from audio_analysis import analyse_wav, read_mono_pcm
 from asset_classifier import classify_wav
 from library_manager import AUDIO_EXT, ARCHIVE_EXT, EXCLUDED_LABEL_RE, infer_labels, sha256_file, wav_info
 from pattern_pipeline import build_pattern_report
@@ -295,8 +295,10 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
                 workers: int | None = None) -> dict[str, Any]:
     """Run a resumable, low-memory read-only inventory and analysis pass.
 
-    Defaults to one worker for older dual-core/8GB systems to keep the PC responsive.
-    Callers may explicitly request two workers on faster systems; the hard cap is two.
+    Uses a two-worker bounded pipeline on the target 2-core / 4-thread system.
+    The audio decoder is shared across acoustic/classification/pitch stages so each
+    source WAV is streamed once for the discovery sample view. The hard cap remains
+    two concurrent files to avoid random-seek overload on a single HDD.
 
     SHA-256 values are cached by absolute path + size + mtime_ns. Unchanged
     files are not re-read on subsequent runs. All source files are read-only.
@@ -408,11 +410,13 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
 
     def hash_with_cancel(path: Path) -> str:
         h = hashlib.sha256()
+        # Larger sequential reads reduce syscall overhead on the 7200-rpm
+        # source drive while keeping memory use bounded per worker.
         with path.open("rb") as stream:
             while True:
                 if cancel_event is not None and cancel_event.is_set():
                     raise RuntimeError("Анализ остановлен пользователем.")
-                block = stream.read(1024 * 1024)
+                block = stream.read(4 * 1024 * 1024)
                 if not block:
                     break
                 h.update(block)
@@ -495,12 +499,18 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
                             classification = json.loads(cached_pair[1])
                             cache_status = "HIT"
                         except (TypeError, ValueError, json.JSONDecodeError):
-                            acoustic = analyse_wav(path, max_samples=90_000)
-                            classification = classify_wav(path, analyze_pitch=True, max_samples=90_000)
+                            decoded = read_mono_pcm(path, max_samples=90_000)
+                            acoustic = analyse_wav(path, max_samples=90_000, decoded=decoded)
+                            classification = classify_wav(
+                                path, analyze_pitch=True, max_samples=90_000, decoded=decoded
+                            )
                             cache_status = "REBUILT_CORRUPT_ENTRY"
                     else:
-                        acoustic = analyse_wav(path, max_samples=90_000)
-                        classification = classify_wav(path, analyze_pitch=True, max_samples=90_000)
+                        decoded = read_mono_pcm(path, max_samples=90_000)
+                        acoustic = analyse_wav(path, max_samples=90_000, decoded=decoded)
+                        classification = classify_wav(
+                            path, analyze_pitch=True, max_samples=90_000, decoded=decoded
+                        )
                     chord_analysis = None
                     if guitar_source_confirmed:
                         chord_analysis = acoustic.get("chord_analysis")
@@ -679,19 +689,23 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
         ),
     )  # SFZ, mapped WAV, other audio, then non-audio metadata.
 
-    # Two I/O workers speed up hashing/inventory on most drives. During
-    # acoustic analysis, default to one worker on older dual-core PCs to keep
-    # the UI responsive; users can explicitly select two after benchmarking.
-    default_workers = 1 if analyze_audio else 2
+    # The user's target machine has 4 logical processors. Two bounded workers
+    # keep both CPU lanes supplied without unleashing many random HDD seeks.
+    default_workers = 2
     worker_count = max(1, min(int(workers if workers is not None else default_workers), 2))
     completed = 0
     pending = set()
+    future_paths: dict[Any, Path] = {}
     iterator = iter(supported_files)
+    last_heartbeat = time.monotonic()
     try:
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="LibraryScan") as pool:
             for _ in range(min(len(supported_files), worker_count)):
                 try:
-                    pending.add(pool.submit(safe_process_one, next(iterator)))
+                    source_path = next(iterator)
+                    future = pool.submit(safe_process_one, source_path)
+                    pending.add(future)
+                    future_paths[future] = source_path
                 except StopIteration:
                     break
             while pending:
@@ -701,8 +715,19 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
                     raise RuntimeError("Анализ остановлен пользователем. Уже обработанные файлы и кэш сохранены.")
                 done, pending = wait(pending, timeout=0.5, return_when=FIRST_COMPLETED)
                 if not done:
+                    now = time.monotonic()
+                    if now - last_heartbeat >= 10:
+                        active_files = ", ".join(
+                            path.name for future, path in future_paths.items() if future in pending
+                        ) or "подготовка результатов"
+                        emit(
+                            f"АНАЛИЗ ПРОДОЛЖАЕТСЯ: {completed}/{len(supported_files)} завершено; "
+                            f"сейчас обрабатывается: {active_files}"
+                        )
+                        last_heartbeat = now
                     continue
                 for future in done:
+                    current_path = future_paths.pop(future, None)
                     result = future.result()
                     row = result["row"]
                     inventory.append(row)
@@ -727,14 +752,22 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
                     completed += 1
                     # Keep the Tk event queue bounded: report progress in
                     # batches, not once per file (12k events can freeze the UI).
-                    if completed == 1 or completed % 50 == 0 or completed == len(supported_files):
+                    if completed == 1 or completed % 5 == 0 or completed == len(supported_files):
+                        active_files = ", ".join(
+                            path.name for future, path in future_paths.items() if future in pending
+                        )
                         emit(
                             f"Обработка: {completed}/{len(supported_files)} "
                             f"({completed / max(1, len(supported_files)):.0%}); "
-                            f"последний файл: {row['filename']}"
+                            f"последний завершён: {row['filename']}; "
+                            f"в работе: {active_files or 'следующий файл'}"
                         )
+                    last_heartbeat = time.monotonic()
                     try:
-                        pending.add(pool.submit(safe_process_one, next(iterator)))
+                        source_path = next(iterator)
+                        future = pool.submit(safe_process_one, source_path)
+                        pending.add(future)
+                        future_paths[future] = source_path
                     except StopIteration:
                         pass
                     if completed % 25 == 0:
