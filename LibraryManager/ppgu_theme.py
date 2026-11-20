@@ -135,6 +135,23 @@ def configure_neon_stage_ttk(style: Any, palette: dict[str, str] | None = None) 
         font=("Segoe UI", 9),
     )
     style.configure(
+        "TLabelframe", background=panel, bordercolor=border,
+        relief="solid", padding=6,
+    )
+    style.configure(
+        "TLabelframe.Label", background=panel, foreground=glow,
+        font=("Segoe UI", 8, "bold"),
+    )
+    style.configure(
+        "TCheckbutton", background=panel, foreground=text,
+        font=("Segoe UI", 9), padding=(4, 4),
+    )
+    style.map(
+        "TCheckbutton",
+        background=[("active", panel)],
+        foreground=[("disabled", disabled), ("active", glow)],
+    )
+    style.configure(
         "TButton", background=control_face, foreground=text,
         bordercolor=border, lightcolor=border, darkcolor=border,
         padding=(10, 6), font=("Segoe UI", 9, "bold"), relief="flat",
@@ -211,6 +228,19 @@ def configure_neon_stage_ttk(style: Any, palette: dict[str, str] | None = None) 
         background=[("disabled", control_bg), ("pressed", control_face), ("active", control_face)],
         foreground=[("disabled", disabled), ("active", glow)],
         bordercolor=[("active", glow), ("focus", glow)],
+    )
+    style.configure(
+        "PPGU.DialogDanger.TButton",
+        background=colors["danger"], foreground="#FFFFFF",
+        bordercolor=colors["danger"], lightcolor=colors["danger"],
+        darkcolor=panel, padding=(12, 7),
+        font=("Segoe UI", 8, "bold"), relief="flat",
+    )
+    style.map(
+        "PPGU.DialogDanger.TButton",
+        background=[("disabled", control_bg), ("pressed", colors["warning"]), ("active", colors["danger"])],
+        foreground=[("disabled", disabled), ("pressed", panel), ("active", "#FFFFFF")],
+        bordercolor=[("active", colors["warning"]), ("focus", colors["warning"])],
     )
 
 
