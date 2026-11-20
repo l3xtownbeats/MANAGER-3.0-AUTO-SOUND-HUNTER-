@@ -275,12 +275,24 @@ def copy_unsupported_to_other(
         raise FileNotFoundError(f"Import folder not found: {incoming}")
     other.mkdir(parents=True, exist_ok=True)
 
-    preserved_extensions = set(AUDIO_EXT) | {".sfz", ".zip", ".7z", ".rar"}
+    preserved_extensions = set(AUDIO_EXT) | {
+        ".sfz", ".zip", ".7z", ".rar",
+        # Keep common library descriptors, licenses and dependency metadata
+        # beside the source bank; they are not "junk" just because they are
+        # not playable audio files.
+        ".json", ".txt", ".md", ".csv", ".xml", ".nfo", ".ini",
+        ".cfg", ".yaml", ".yml",
+    }
     candidates: list[Path] = []
     for current, dirs, files in os.walk(incoming):
+        relative_folder = Path(current).relative_to(incoming)
+        if any(part.casefold() == "virtual_candidates" for part in relative_folder.parts):
+            dirs[:] = []
+            continue
         dirs[:] = sorted(
             name for name in dirs
             if not name.startswith(".manager-import-tmp-")
+            and name.casefold() != "virtual_candidates"
         )
         for name in sorted(files, key=str.casefold):
             source = Path(current) / name
