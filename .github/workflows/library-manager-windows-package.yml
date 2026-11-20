@@ -39,6 +39,31 @@ jobs:
           python -m compileall -q .
           python -m unittest discover -v -p "test_*.py"
 
+      - name: Launch NEON STAGE from source and verify desktop shell
+        working-directory: LibraryManager
+        shell: pwsh
+        run: |
+          @'
+          import tkinter as tk
+          from manager_gui import LibraryManagerApp
+
+          root = tk.Tk()
+          try:
+              app = LibraryManagerApp(root)
+              root.update()
+              assert len(app._action_buttons) == 2, (
+                  f"Expected exactly 2 primary workflow actions, got {len(app._action_buttons)}"
+              )
+              assert "NEON STAGE DEFAULT" in root.title(), root.title()
+              assert app._progress_bar is not None
+              assert app.log is not None
+              print("NEON STAGE GUI source smoke-test: PASS")
+              print(f"Window title: {root.title()}")
+              print(f"Primary workflow actions: {len(app._action_buttons)}")
+          finally:
+              root.destroy()
+          '@ | python -
+
       - name: Build portable folder
         working-directory: LibraryManager
         run: |
