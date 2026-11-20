@@ -94,7 +94,7 @@ class LibraryManagerApp:
             )
 
     def _build(self) -> None:
-        """Build the NEON STAGE Manager workspace with the six approved primary actions."""
+        """Build the NEON STAGE Manager workspace with the two approved primary actions."""
         palette = NEON_STAGE_THEME["palette"]
         bg = "#01040D"
         panel = "#061225"
@@ -380,11 +380,10 @@ class LibraryManagerApp:
                 anchor="w", fill=amber, font=("Segoe UI", 8),
             )
 
-        # SIX PRIMARY WORKFLOWS — the exact approved Manager navigation surface.
-        # Each control invokes an existing, real operation; no decorative/fake actions.
+        # TWO PRIMARY WORKFLOWS — keep the main screen focused on the two core actions.
         actions_panel = VstPanel(
             center, "NEON STAGE  /  MAIN CONTROL",
-            tag="SIX CORE WORKFLOWS  •  LIVE ACTIONS", accent=cyan,
+            tag="TWO CORE ACTIONS  •  LIVE WORKFLOWS", accent=cyan,
         )
         actions_panel.pack(fill="x", pady=(0, 7))
         action_grid = tk.Frame(actions_panel.body, bg=inset)
@@ -393,91 +392,33 @@ class LibraryManagerApp:
         action_grid.grid_columnconfigure(1, weight=1, uniform="main-actions")
 
         primary_actions = (
-            ("01", "IMPORT GUITAR", "COPY SOURCE  /  SHA-256 VERIFY",
+            ("01", "IMPORT SAMPLE GUITAR", "SAFE IMPORT  /  SOURCE COPY  /  SHA-256",
              self.import_guitar, "folder", cyan, "primary"),
-            ("02", "SCAN LIBRARY", "FAST INVENTORY  /  FILESYSTEM",
-             self.quick_scan_only, "scan", blue, "secondary"),
-            ("03", "START HUNTING", "FULL SCAN  /  AUDIO  /  CANDIDATES",
+            ("02", "START SCAN HUNTING", "SCAN  /  AUDIO ANALYSIS  /  CANDIDATE HUNT",
              self.scan_hunting, "scan", magenta, "magenta"),
-            ("04", "REVIEW QUEUE", "HUMAN REVIEW  /  PENDING CANDIDATES",
-             self.open_review_queue, "queue", amber, "secondary"),
-            ("05", "BUILD LIBRARY", "DISTRIBUTE ONLY ELIGIBLE APPROVED ASSETS",
-             self.distribute, "reports", green, "secondary"),
-            ("06", "VERIFY / RECOVERY", "AUDIT STAGING  /  FACTORY INTEGRITY",
-             self.finalize_library, "reports", purple, "secondary"),
         )
         self._action_buttons = []
         for index, (number, title, subtitle, command, icon, accent, variant) in enumerate(primary_actions):
             card = tk.Frame(
                 action_grid, bg="#06152B",
                 highlightbackground="#24517D", highlightthickness=1,
-                bd=0, padx=7, pady=6,
+                bd=0, padx=9, pady=8,
             )
-            card.grid(
-                row=index // 2, column=index % 2, sticky="nsew",
-                padx=(0, 4) if index % 2 == 0 else (4, 0),
-                pady=4,
-            )
-            rail = tk.Frame(card, bg="#06152B")
-            rail.pack(fill="x", pady=(0, 3))
+            card.grid(row=0, column=index, sticky="nsew", padx=4, pady=4)
             tk.Label(
-                rail, text=number, bg="#06152B", fg=accent,
-                font=("Consolas", 8, "bold"),
-            ).pack(side="left")
-            tk.Label(
-                rail, text=title, bg="#06152B", fg=text,
-                font=("Segoe UI", 8, "bold"),
-            ).pack(side="left", padx=(8, 0))
+                card, text=number, bg="#06152B", fg=accent,
+                font=("Consolas", 9, "bold"),
+            ).pack(anchor="w", pady=(0, 4))
             button = NeonActionButton(
                 card, title, command,
                 subtitle=subtitle, icon=icon, accent=accent,
-                variant=variant, width=390, height=65,
+                variant=variant, width=420, height=92,
             )
             button.pack(fill="x")
             self._action_buttons.append(button)
 
-        # PROCESS MAP — informational only; live completion is reported by the task monitor.
-        pipeline_panel = VstPanel(
-            center, "SIGNAL PATH  /  LIBRARY BUILD PIPELINE",
-            tag="REAL TASK EVENTS ONLY", accent=purple,
-        )
-        pipeline_panel.pack(fill="both", expand=True)
-        pipeline = tk.Frame(pipeline_panel.body, bg=inset)
-        pipeline.pack(fill="both", expand=True)
-        stages = (
-            ("01", "IMPORT", "Verified copy", cyan),
-            ("02", "SCAN", "File inventory", blue),
-            ("03", "HUNT", "Audio + SFZ", purple),
-            ("04", "EXTRACT", "Candidates", magenta),
-            ("05", "REVIEW", "Human gate", amber),
-            ("06", "BUILD", "Approved only", green),
-        )
-        for index, (number, title, caption, color) in enumerate(stages):
-            cell = tk.Frame(
-                pipeline, bg="#07162B",
-                highlightbackground="#1C4778", highlightthickness=1,
-                padx=5, pady=7,
-            )
-            cell.grid(row=0, column=index, sticky="nsew", padx=2, pady=2)
-            pipeline.grid_columnconfigure(index, weight=1, uniform="pipeline")
-            tk.Label(
-                cell, text=number, bg="#07162B", fg=color,
-                font=("Consolas", 9, "bold"),
-            ).pack(anchor="w")
-            tk.Label(
-                cell, text=title, bg="#07162B", fg=text,
-                font=("Segoe UI", 7, "bold"), justify="left",
-                wraplength=100,
-            ).pack(anchor="w", pady=(3, 2))
-            tk.Label(
-                cell, text=caption, bg="#07162B", fg=dim,
-                font=("Segoe UI", 6), justify="left", wraplength=100,
-            ).pack(anchor="w")
-        tk.Label(
-            pipeline_panel.body,
-            text="PIPELINE MAP ONLY — NO STAGE IS MARKED COMPLETE UNTIL A REAL TASK REPORTS IT.",
-            bg=inset, fg=dim, font=("Consolas", 6, "bold"),
-        ).pack(anchor="w", pady=(5, 0))
+        # Secondary tools remain available in the menus and side panels.
+        # The main action area intentionally contains exactly two large buttons.
 
         # RIGHT RACK — live task state and the review gate; no simulated meters.
         right = tk.Frame(workspace, bg=bg, width=290)
@@ -492,7 +433,7 @@ class LibraryManagerApp:
         monitor_header.pack(fill="x")
         self._progress_title = tk.StringVar(value="READY  /  ОЖИДАНИЕ")
         self._progress_detail = tk.StringVar(
-            value="Выберите одно из шести основных действий."
+            value="Выберите одно из двух основных действий."
         )
         tk.Label(
             monitor_header, textvariable=self._progress_title,
