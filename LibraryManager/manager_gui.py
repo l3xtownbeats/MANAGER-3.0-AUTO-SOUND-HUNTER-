@@ -240,6 +240,49 @@ class LibraryManagerApp:
             side="right", padx=4, pady=5,
         )
 
+        # Compact top-right utility rail. Each icon opens a real Manager
+        # destination; no decorative or non-functional account controls.
+        utility_rail = tk.Frame(top_row, bg=inset)
+        utility_rail.pack(side="right", padx=(8, 5), pady=3)
+
+        def post_utility_menu(menu, anchor):
+            menu.post(
+                anchor.winfo_rootx(),
+                anchor.winfo_rooty() + anchor.winfo_height(),
+            )
+
+        utility_button_style = {
+            "bg": "#0A1B34",
+            "fg": cyan,
+            "activebackground": "#123D6A",
+            "activeforeground": "#FFFFFF",
+            "relief": "raised",
+            "bd": 1,
+            "highlightthickness": 1,
+            "highlightbackground": "#24517D",
+            "highlightcolor": cyan,
+            "font": ("Segoe UI Symbol", 11, "bold"),
+            "width": 3,
+            "cursor": "hand2",
+            "takefocus": True,
+        }
+        self._settings_icon = tk.Button(
+            utility_rail, text="⚙",
+            command=lambda: post_utility_menu(settings_menu, self._settings_icon),
+            **utility_button_style,
+        )
+        self._settings_icon.pack(side="left", padx=2)
+        self._session_icon = tk.Button(
+            utility_rail, text="◷", command=self.show_task_history,
+            **utility_button_style,
+        )
+        self._session_icon.pack(side="left", padx=2)
+        self._help_icon = tk.Button(
+            utility_rail, text="?", command=self.open_user_guide,
+            **utility_button_style,
+        )
+        self._help_icon.pack(side="left", padx=2)
+
         workspace = tk.Frame(deck, bg=bg)
         workspace.pack(fill="both", expand=True, padx=7, pady=(0, 6))
 
