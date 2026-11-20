@@ -117,10 +117,12 @@ class LibraryStructureTests(unittest.TestCase):
                 "melody_mapping_verified": True,
             },
         }
-        result = build_library_structure(_catalog({
-            "PATTERN MODE": [pattern], "MELODY MODE": [melody],
-        }))
-        self.assertEqual(result["pattern_mode"]["assets"][0]["pattern_structure_status"], "STRUCTURE_VERIFIED")
+        catalog = _catalog({"MELODY MODE": [melody]})
+        catalog["pattern_instrument_assets"] = [pattern]
+        result = build_library_structure(catalog)
+        self.assertEqual(result["pattern_mode"]["performances"][0]["pattern_structure_status"], "STRUCTURE_VERIFIED")
+        self.assertEqual(result["pattern_mode"]["performances"][0]["loop_playback_mode"], "FULL_SOURCE_LOOP")
+        self.assertTrue(result["pattern_mode"]["performances"][0]["loop_content_unchanged"])
         self.assertEqual(result["melody_mode"]["assets"][0]["melody_structure_status"], "STRUCTURE_VERIFIED")
         self.assertEqual(result["pattern_mode"]["selector_layout"][0]["selector_key"], "C1")
 
