@@ -94,7 +94,7 @@ class LibraryManagerApp:
             )
 
     def _build(self) -> None:
-        """Build the real, dense NEON STAGE Manager workspace with two main actions."""
+        """Build the NEON STAGE Manager workspace with the six approved primary actions."""
         palette = NEON_STAGE_THEME["palette"]
         bg = "#01040D"
         panel = "#061225"
@@ -492,7 +492,7 @@ class LibraryManagerApp:
         monitor_header.pack(fill="x")
         self._progress_title = tk.StringVar(value="READY  /  ОЖИДАНИЕ")
         self._progress_detail = tk.StringVar(
-            value="Выберите одну из двух основных операций."
+            value="Выберите одно из шести основных действий."
         )
         tk.Label(
             monitor_header, textvariable=self._progress_title,
