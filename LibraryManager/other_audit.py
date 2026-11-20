@@ -291,6 +291,7 @@ def copy_unsupported_to_other(
     errors: list[dict[str, str]] = []
     copied = skipped = 0
     journal = other / "LibraryManagerReports" / "unsupported_copies.jsonl"
+    journal.parent.mkdir(parents=True, exist_ok=True)
     for index, source in enumerate(candidates, 1):
         if cancel_event is not None and cancel_event.is_set():
             return {
@@ -360,7 +361,7 @@ def copy_unsupported_to_other(
                     stream.flush()
                     os.fsync(stream.fileno())
                 with journal.open("a", encoding="utf-8") as stream:
-                    stream.write(json.dumps({"event": "COPIED_UNSUPPORTED_TO_OTHER", **record}, ensure_ascii=False) + "\\n")
+                    stream.write(json.dumps({"event": "COPIED_UNSUPPORTED_TO_OTHER", **record}, ensure_ascii=False) + "\n")
                     stream.flush()
                     os.fsync(stream.fileno())
                 copied += 1
