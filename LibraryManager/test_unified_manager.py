@@ -366,11 +366,12 @@ class UnifiedManagerTests(unittest.TestCase):
         summary = run_manager(self.samples, reports_root=self.reports)
         self.assertEqual(summary["workers"], 2)
 
-    def test_heavy_audio_analysis_defaults_to_one_worker(self) -> None:
+    def test_heavy_audio_analysis_defaults_to_two_workers_on_four_logical_cpus(self) -> None:
         summary = run_manager(
             self.samples, analyze_audio=True, reports_root=self.reports,
         )
-        self.assertEqual(summary["workers"], 1)
+        self.assertEqual(summary["workers"], 2)
+
     def test_second_scan_reuses_hash_cache_without_modifying_sources(self) -> None:
         first = run_manager(self.samples, reports_root=self.reports)
         second = run_manager(self.samples, reports_root=self.reports)
