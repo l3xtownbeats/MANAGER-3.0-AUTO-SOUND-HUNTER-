@@ -136,14 +136,15 @@ def configure_neon_stage_ttk(style: Any, palette: dict[str, str] | None = None) 
     )
     style.configure(
         "TButton", background=control_face, foreground=text,
-        bordercolor=border, lightcolor=border, darkcolor=border,
-        padding=(10, 6), font=("Segoe UI", 9, "bold"), relief="flat",
+        bordercolor=border, lightcolor=glow, darkcolor=colors["lowlight"],
+        borderwidth=2, padding=(12, 8), font=("Segoe UI", 9, "bold"), relief="raised",
     )
     style.map(
         "TButton",
         background=[("disabled", control_bg), ("pressed", accent), ("active", accent)],
         foreground=[("disabled", disabled), ("pressed", "#FFFFFF"), ("active", "#FFFFFF")],
         bordercolor=[("active", glow), ("focus", glow)],
+        relief=[("pressed", "sunken"), ("active", "raised")],
     )
     style.configure(
         "TCombobox", fieldbackground=control_bg, background=control_face,

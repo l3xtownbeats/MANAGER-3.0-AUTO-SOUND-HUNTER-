@@ -108,10 +108,15 @@ class UnifiedManagerTests(unittest.TestCase):
             module_root = Path(tmp) / "bundle"
             expected_staging = data_root / "staging"
             expected_staging.mkdir(parents=True)
+            expected_cache = data_root / "fast-cache"
+            expected_cache.mkdir(parents=True)
             index_result = {"assignment_count": 0, "status": "NO_REVIEWED_ASSETS", "assignments": []}
             with patch(
                 "unified_manager.resolve_runtime_paths",
                 return_value=(module_root, data_root, True),
+            ), patch(
+                "unified_manager.resolve_fast_cache_dir",
+                return_value=expected_cache,
             ), patch(
                 "unified_manager.runtime_staging_root",
                 return_value=expected_staging,
@@ -122,7 +127,7 @@ class UnifiedManagerTests(unittest.TestCase):
                 result = run_manager(self.samples)
             report_dir = Path(result["report_directory"])
             self.assertEqual(report_dir.parent.resolve(), (data_root / "reports").resolve())
-            self.assertTrue((data_root / "reports" / "scan_cache.sqlite3").is_file())
+            self.assertTrue((expected_cache / "scan_cache.sqlite3").is_file())
             staging_root.assert_called_once()
             build_index.assert_called_once_with(expected_staging)
 
@@ -366,11 +371,12 @@ class UnifiedManagerTests(unittest.TestCase):
         summary = run_manager(self.samples, reports_root=self.reports)
         self.assertEqual(summary["workers"], 2)
 
-    def test_heavy_audio_analysis_defaults_to_one_worker(self) -> None:
+    def test_heavy_audio_analysis_defaults_to_two_workers_on_four_logical_cpus(self) -> None:
         summary = run_manager(
             self.samples, analyze_audio=True, reports_root=self.reports,
         )
-        self.assertEqual(summary["workers"], 1)
+        self.assertEqual(summary["workers"], 2)
+
     def test_second_scan_reuses_hash_cache_without_modifying_sources(self) -> None:
         first = run_manager(self.samples, reports_root=self.reports)
         second = run_manager(self.samples, reports_root=self.reports)

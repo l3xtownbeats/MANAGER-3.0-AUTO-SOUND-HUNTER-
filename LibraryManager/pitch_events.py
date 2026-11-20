@@ -20,27 +20,48 @@ def _yin_pitch(frame: list[float], sample_rate: float,
                min_hz: float, max_hz: float) -> tuple[int, float, float] | None:
     if len(frame) < 96:
         return None
-    mean = sum(frame) / len(frame)
-    x = [v - mean for v in frame]
-    energy = sum(v * v for v in x) / len(x)
-    if energy < 1e-7:
-        return None
     min_lag = max(2, int(sample_rate / max_hz))
-    max_lag = min(len(x) // 2, int(sample_rate / min_hz))
+    max_lag = min(len(frame) // 2, int(sample_rate / min_hz))
     if max_lag <= min_lag:
         return None
 
-    diff = [0.0] * (max_lag + 1)
-    for lag in range(1, max_lag + 1):
-        diff[lag] = sum((x[i] - x[i + lag]) ** 2
-                        for i in range(len(x) - lag))
-    running = 0.0
-    cmnd = [1.0] * (max_lag + 1)
-    for lag in range(1, max_lag + 1):
-        running += diff[lag]
-        cmnd[lag] = diff[lag] * lag / running if running > 0 else 1.0
+    # YIN's difference function used to perform millions of inner-loop Python
+    # operations per WAV. NumPy moves each lag correlation into optimized native
+    # code, while preserving the same CMND selection and interpolation rules.
+    try:
+        import numpy as np
+        x = np.asarray(frame, dtype=np.float64)
+        x = x - x.mean()
+        energy = float(np.dot(x, x)) / len(x)
+        if energy < 1e-7:
+            return None
+        diff = np.zeros(max_lag + 1, dtype=np.float64)
+        for lag in range(1, max_lag + 1):
+            delta = x[:-lag] - x[lag:]
+            diff[lag] = np.dot(delta, delta)
+        cumulative = np.cumsum(diff[1:])
+        cmnd = np.ones(max_lag + 1, dtype=np.float64)
+        lags = np.arange(1, max_lag + 1, dtype=np.float64)
+        valid = cumulative > 0
+        cmnd_values = np.ones_like(cumulative)
+        cmnd_values[valid] = diff[1:][valid] * lags[valid] / cumulative[valid]
+        cmnd[1:] = cmnd_values
+    except ImportError:
+        mean = sum(frame) / len(frame)
+        x = [v - mean for v in frame]
+        energy = sum(v * v for v in x) / len(x)
+        if energy < 1e-7:
+            return None
+        diff = [0.0] * (max_lag + 1)
+        for lag in range(1, max_lag + 1):
+            diff[lag] = sum((x[i] - x[i + lag]) ** 2
+                            for i in range(len(x) - lag))
+        running = 0.0
+        cmnd = [1.0] * (max_lag + 1)
+        for lag in range(1, max_lag + 1):
+            running += diff[lag]
+            cmnd[lag] = diff[lag] * lag / running if running > 0 else 1.0
 
-    # Prefer the first convincing period to reduce octave errors.
     threshold = 0.18
     chosen = None
     for lag in range(min_lag, max_lag):
@@ -51,10 +72,9 @@ def _yin_pitch(frame: list[float], sample_rate: float,
             break
     if chosen is None:
         chosen = min(range(min_lag, max_lag + 1), key=lambda n: cmnd[n])
-    confidence = max(0.0, min(1.0, 1.0 - cmnd[chosen]))
+    confidence = max(0.0, min(1.0, 1.0 - float(cmnd[chosen])))
     if confidence < 0.65:
         return None
-    # Parabolic interpolation around the selected lag.
     if 1 < chosen < max_lag:
         left, center, right = cmnd[chosen - 1:chosen + 2]
         denom = left - 2 * center + right
@@ -68,13 +88,16 @@ def _yin_pitch(frame: list[float], sample_rate: float,
 def analyze_pitch_events(path: Path, *, frame_ms: int = 30,
                          hop_ms: int = 10, min_hz: float = 65.0,
                          max_hz: float = 1200.0,
-                         min_event_seconds: float = 0.07) -> dict[str, Any]:
+                         min_event_seconds: float = 0.07,
+                         decoded=None) -> dict[str, Any]:
     if frame_ms < 20 or hop_ms < 5 or hop_ms > frame_ms:
         raise ValueError("Use frame_ms >= 20 and 5 <= hop_ms <= frame_ms")
     if min_hz <= 0 or max_hz <= min_hz or min_event_seconds <= 0:
         raise ValueError("Invalid pitch or event limits")
 
-    samples, rate, total_frames, channels, width, decimation = read_mono_pcm(path, max_samples=100_000)
+    samples, rate, total_frames, channels, width, decimation = (
+        decoded if decoded is not None else read_mono_pcm(path, max_samples=100_000)
+    )
     if not samples or rate <= 0:
         raise ValueError("Empty or invalid WAV")
     effective_rate = rate / decimation

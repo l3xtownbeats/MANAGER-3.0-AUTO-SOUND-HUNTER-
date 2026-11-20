@@ -20,6 +20,7 @@ from typing import Any
 
 from factory_curator import INSTRUMENTS, ROLES, STYLES, TONES
 from audio_range_io import audio_source_info
+from performance_profile import HASH_READ_BLOCK_BYTES
 
 VERSION = "0.2.0"
 APPROVED_REVIEW_STATES = {"REVIEWED", "BOUNDARIES_USER_OR_REVIEWER_APPROVED"}
@@ -28,7 +29,7 @@ APPROVED_REVIEW_STATES = {"REVIEWED", "BOUNDARIES_USER_OR_REVIEWER_APPROVED"}
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
+        for block in iter(lambda: stream.read(HASH_READ_BLOCK_BYTES), b""):
             digest.update(block)
     return digest.hexdigest().upper()
 
@@ -112,14 +113,17 @@ def _load_approved_manifest(manifest_path: Path, staging_root: Path,
 
 
 def distribution_plan(manifest_paths: list[Path], samples_root: Path,
-                      staging_root: Path) -> dict[str, Any]:
+                      staging_root: Path, *,
+                      source_hash_cache: dict[str, str] | None = None) -> dict[str, Any]:
     samples_root = samples_root.resolve()
     factory_root = samples_root / "FACTORY"
     entries = []
     seen = set()
-    source_hash_cache: dict[str, str] = {}
+    shared_source_hash_cache = source_hash_cache if source_hash_cache is not None else {}
     for manifest_path in manifest_paths:
-        record, source, digest = _load_approved_manifest(manifest_path, staging_root, source_hash_cache)
+        record, source, digest = _load_approved_manifest(
+            manifest_path, staging_root, shared_source_hash_cache
+        )
         if digest in seen:
             raise ValueError(f"Duplicate staged content in one distribution batch: {digest}")
         seen.add(digest)
@@ -227,7 +231,7 @@ def distribute_assets(plan: dict[str, Any], *, approve: bool = False,
         try:
             with source.open("rb") as src, destination.open("xb") as dst:
                 created_audio = True
-                shutil.copyfileobj(src, dst, length=1024 * 1024)
+                shutil.copyfileobj(src, dst, length=HASH_READ_BLOCK_BYTES)
             copied_hash = sha256_file(destination)
             if copied_hash != entry["source_sha256"]:
                 raise IOError("Destination SHA-256 mismatch")
@@ -297,6 +301,10 @@ def auto_distribute_approved(
     )
     ready: list[tuple[Path, dict[str, Any]]] = []
     rejected: list[dict[str, str]] = []
+    # Many extracted candidates can share one long original recording. Reuse
+    # its verified SHA-256 across manifests rather than rereading that HDD file
+    # for every candidate in the same distribution run.
+    verified_source_hashes: dict[str, str] = {}
     for index, manifest in enumerate(manifests, 1):
         if cancel_event is not None and cancel_event.is_set():
             return {
@@ -309,7 +317,10 @@ def auto_distribute_approved(
                 "source_originals_deleted": False,
             }
         try:
-            plan = distribution_plan([manifest], samples, staging)
+            plan = distribution_plan(
+                [manifest], samples, staging,
+                source_hash_cache=verified_source_hashes,
+            )
             if len(plan.get("entries", [])) != 1:
                 raise ValueError("Manifest did not produce exactly one eligible FACTORY asset")
             ready.append((manifest, plan))
@@ -503,6 +514,7 @@ def distribute_assets_transactional(
     approve: bool = False,
     journal_path: Path | None = None,
     cancel_event: Any = None,
+    source_hash_cache: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Preflight and copy a complete approved batch, rolling back this batch on error.
 
@@ -535,7 +547,10 @@ def distribute_assets_transactional(
     # Rebuild the plan immediately before writing. This rechecks musical and
     # license approvals, source/derived hashes, PCM format and sample bounds,
     # and prevents a stale or edited plan from changing a destination.
-    canonical = distribution_plan(manifests, samples_root, staging_root)
+    canonical = distribution_plan(
+        manifests, samples_root, staging_root,
+        source_hash_cache=source_hash_cache,
+    )
     def signature(items: list[dict[str, Any]]) -> list[tuple[str, str, str, str, str]]:
         return sorted(
             (
@@ -568,8 +583,12 @@ def distribute_assets_transactional(
             raise ValueError(f"Duplicate staged content in the distribution batch: {digest}")
         destinations.add(destination_key)
         hashes.add(digest)
-        if not source.is_file() or sha256_file(source) != digest:
-            raise RuntimeError(f"Staged source changed during preflight: {source}")
+        # The canonical distribution_plan above has just streamed this staged
+        # file through SHA-256 and validated the manifest/source provenance.
+        # Recheck existence here; the source hash is checked again immediately
+        # before the copy opens it below, avoiding one redundant complete read.
+        if not source.is_file():
+            raise RuntimeError(f"Staged source disappeared during preflight: {source}")
         sidecar = destination.with_suffix(destination.suffix + ".json")
         if destination.exists() or sidecar.exists():
             raise FileExistsError(f"Refusing to overwrite existing destination or manifest: {destination}")
@@ -607,7 +626,7 @@ def distribute_assets_transactional(
             with source.open("rb") as src, destination.open("xb") as dst:
                 created_item["audio_created"] = True
                 created.append(created_item)
-                shutil.copyfileobj(src, dst, length=1024 * 1024)
+                shutil.copyfileobj(src, dst, length=HASH_READ_BLOCK_BYTES)
                 dst.flush()
                 os.fsync(dst.fileno())
 

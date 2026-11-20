@@ -7,6 +7,8 @@ All file operations remain review-gated by library_operations.py.
 from __future__ import annotations
 
 import json
+import os
+import re
 import queue
 import threading
 import traceback
@@ -36,6 +38,11 @@ from library_operations import (
     auto_distribute_approved,
 )
 from ppgu_theme import NEON_STAGE_THEME, resource_path, configure_neon_stage_ttk
+from neon_stage_widgets import NeonStageButton, NeonStageRail
+from performance_profile import (
+    apply_windows_resource_limits, performance_profile_text,
+    recommended_scan_workers,
+)
 
 APP_VERSION = "3.0.0"
 BUNDLE_DIR, MANAGER_DIR, PORTABLE_MODE = resolve_runtime_paths(__file__)
@@ -57,6 +64,10 @@ class LibraryManagerApp:
         self.analyze_audio = tk.BooleanVar(value=True)
         self.guitar_confirmed = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Готов. Выберите Samples или непосредственно Import Sample Guitar.")
+        self._resource_limits = apply_windows_resource_limits()
+        self._performance_profile = performance_profile_text()
+        self._scan_progress_value = tk.DoubleVar(value=0.0)
+        self._scan_progress_message = tk.StringVar(value="READY  /  ОЖИДАНИЕ ЗАДАЧИ")
         # Worker threads must never call Tkinter methods. They only enqueue events;
         # the Tk main thread drains this queue in _poll_worker_events().
         self._worker_events = queue.Queue()
@@ -134,6 +145,28 @@ class LibraryManagerApp:
             background=[("disabled", control_face), ("pressed", accent_glow), ("active", accent_glow)],
             foreground=[("disabled", disabled)],
             bordercolor=[("active", accent_glow)],
+        )
+        style.configure(
+            "PPGU.Scan.TButton",
+            background=accent_purple,
+            foreground="#FFFFFF",
+            bordercolor=accent_purple,
+            lightcolor=accent_magenta,
+            darkcolor=accent_purple,
+            padding=(14, 10),
+            font=("Segoe UI", 9, "bold"),
+            relief="flat",
+        )
+        style.map(
+            "PPGU.Scan.TButton",
+            background=[("disabled", control_face), ("pressed", accent_magenta), ("active", accent_magenta)],
+            foreground=[("disabled", disabled), ("active", "#FFFFFF")],
+            bordercolor=[("active", accent_magenta)],
+        )
+        style.configure(
+            "PPGU.Horizontal.TProgressbar",
+            background=accent_glow, troughcolor=control_bg,
+            bordercolor=border, lightcolor=accent_glow, darkcolor=accent,
         )
         style.configure(
             "PPGU.Danger.TButton",
@@ -236,7 +269,10 @@ class LibraryManagerApp:
         )
         menu_bar.add_cascade(label="НАСТРОЙКИ", menu=settings_menu)
 
-        outer = tk.Frame(self.root, bg=bg)
+        outer = tk.Frame(
+            self.root, bg=bg, highlightbackground=accent_glow,
+            highlightthickness=1, bd=3, relief="ridge",
+        )
         outer.pack(fill="both", expand=True, padx=20, pady=16)
 
         # Premium brand header, using the actual PPGU NEON STAGE hero asset.
@@ -266,7 +302,7 @@ class LibraryManagerApp:
         self._skin_hero = None
         try:
             hero = tk.PhotoImage(file=str(resource_path("assets", "hero.png")))
-            factor = max(1, (hero.width() + 179) // 180, (hero.height() + 89) // 90)
+            factor = max(1, (hero.width() + 239) // 240, (hero.height() + 134) // 135)
             self._skin_hero = hero.subsample(factor, factor)
             tk.Label(
                 header, image=self._skin_hero, bg=panel,
@@ -277,8 +313,8 @@ class LibraryManagerApp:
             self._skin_hero = None
 
         version = tk.Frame(
-            header, bg=panel_alt, highlightbackground=border,
-            highlightthickness=1, padx=14, pady=10,
+            header, bg=panel_alt, highlightbackground=accent_glow,
+            highlightthickness=2, bd=3, relief="raised", padx=14, pady=10,
         )
         version.pack(side="right", anchor="n")
         tk.Label(
@@ -296,8 +332,8 @@ class LibraryManagerApp:
 
         # The location is visible, but path-changing controls live in the Project menu.
         path_panel = tk.Frame(
-            outer, bg=panel, highlightbackground=border,
-            highlightthickness=1, padx=14, pady=10,
+            outer, bg=panel_alt, highlightbackground=palette["highlight"],
+            highlightthickness=2, bd=3, relief="sunken", padx=14, pady=10,
         )
         path_panel.pack(fill="x", pady=(0, 15))
         tk.Label(
@@ -307,7 +343,7 @@ class LibraryManagerApp:
         self.samples_entry = tk.Entry(
             path_panel, textvariable=self.samples_root,
             bg=control_bg, fg=text, insertbackground=accent,
-            relief="flat", highlightthickness=1,
+            relief="sunken", bd=2, highlightthickness=2,
             highlightbackground=border, highlightcolor=accent,
             font=("Consolas", 9), readonlybackground=control_bg,
             state="readonly",
@@ -317,54 +353,49 @@ class LibraryManagerApp:
         section_head = tk.Frame(outer, bg=bg)
         section_head.pack(fill="x", pady=(0, 8))
         tk.Label(
-            section_head, text="ОСНОВНОЙ РАБОЧИЙ ПОТОК",
+            section_head, text="NEON STAGE  /  PRIMARY OPERATIONS",
             bg=bg, fg=text, font=("Segoe UI", 12, "bold"),
         ).pack(side="left")
         tk.Label(
-            section_head, text="6 ОСНОВНЫХ ЭТАПОВ  •  ОРИГИНАЛЫ ЗАЩИЩЕНЫ",
+            section_head, text="2 ГЛАВНЫЕ ОПЕРАЦИИ  •  ПОЛНЫЙ WORKFLOW В МЕНЮ",
             bg=bg, fg=muted, font=("Segoe UI", 8, "bold"),
         ).pack(side="right")
 
         cards = tk.Frame(outer, bg=bg)
         cards.pack(fill="x")
-        for column in range(3):
-            cards.grid_columnconfigure(column, weight=1, uniform="workflow")
+        cards.grid_columnconfigure(0, weight=1, uniform="primary")
+        cards.grid_columnconfigure(1, weight=1, uniform="primary")
 
-        workflow = [
-            ("01", "IMPORT GUITAR",
-             "Импорт файлов и папок в Import Sample Guitar с SHA-256-проверкой копий. Оригиналы остаются нетронутыми.",
-             self.import_guitar, "SOURCE INTAKE"),
-            ("02", "SCAN LIBRARY",
-             "Быстрая инвентаризация структуры, форматов и SFZ-зависимостей. Хеширование и декодирование — только по необходимости.",
-             self.deep_scan_only, "SMART SCAN"),
-            ("03", "START HUNTING",
-             "Поиск нот, паттернов, риффов и музыкальных кандидатов. Сомнительные результаты не получают выдуманных тегов.",
-             self.scan, "AUDIO INTELLIGENCE"),
-            ("04", "REVIEW QUEUE",
-             "Прослушивание оригиналов и производных, проверка границ, нот, артикуляций, категорий библиотеки VST3 и лицензии.",
-             self.open_review_queue, "HUMAN APPROVAL"),
-            ("05", "BUILD LIBRARY",
-             "Сборка каталога подготовленных ассетов и Performance Manifest для отдельного VST3. Неодобренное остаётся в staging.",
-             self.build_plugin_catalog, "LIBRARY CATALOG"),
-            ("06", "VERIFY / RECOVERY",
-             "Целостность WAV и manifests, SHA-256, provenance, лицензии, отчёты и безопасное восстановление.",
-             self.finalize_library, "INTEGRITY / RECOVERY"),
+        primary_operations = [
+            (
+                "01", "IMPORT SAMPLE GUITAR",
+                "Добавить WAV / SFZ / архивы и целые папки. Manager создаёт проверенные копии, "
+                "сохраняет зависимости SFZ и SHA-256; оригиналы остаются нетронутыми.",
+                self.import_guitar, "SOURCE INTAKE  /  VERIFIED COPY", accent,
+                "ОТКРЫТЬ ИМПОРТ",
+            ),
+            (
+                "02", "START SCAN HUNTING",
+                "Единый полный цикл: инвентаризация, SHA-256, SFZ, акустика, поиск нот и паттернов, "
+                "извлечение кандидатов, отчёты и подготовка к ручной проверке.",
+                self.scan, "FULL LIBRARY INTELLIGENCE  /  REVIEW GATED", accent_purple,
+                "ЗАПУСТИТЬ ПОЛНЫЙ АНАЛИЗ",
+            ),
         ]
 
         self._action_buttons = []
-        for index, (number, title, description, command, tag) in enumerate(workflow):
-            row, column = divmod(index, 3)
+        for index, (number, title, description, command, tag, edge, button_text) in enumerate(primary_operations):
             card = tk.Frame(
-                cards, bg=panel, highlightbackground=border,
-                highlightthickness=1, padx=14, pady=12,
+                cards, bg=panel_alt, highlightbackground=edge,
+                highlightthickness=3, bd=4, relief="raised", padx=18, pady=16,
             )
-            card.grid(row=row, column=column, sticky="nsew", padx=5, pady=5)
-            tk.Frame(card, bg=(accent, accent_purple, accent_magenta)[index % 3], height=3).pack(fill="x", pady=(0, 10))
+            card.grid(row=0, column=index, sticky="nsew", padx=6, pady=5)
+            NeonStageRail(card, accent=edge, height=8).pack(fill="x", pady=(0, 12))
             top = tk.Frame(card, bg=panel)
             top.pack(fill="x")
             tk.Label(
-                top, text=number, bg=panel, fg=accent,
-                font=("Consolas", 17, "bold"),
+                top, text=number, bg=panel, fg=accent_glow,
+                font=("Consolas", 25, "bold"),
             ).pack(side="left")
             tk.Label(
                 top, text=tag, bg=panel, fg=muted,
@@ -372,24 +403,98 @@ class LibraryManagerApp:
             ).pack(side="right")
             tk.Label(
                 card, text=title, bg=panel, fg=text,
-                font=("Segoe UI", 10, "bold"), anchor="w",
-            ).pack(fill="x", pady=(4, 5))
+                font=("Segoe UI", 14, "bold"), anchor="w",
+            ).pack(fill="x", pady=(8, 7))
             tk.Label(
                 card, text=description, bg=panel, fg=muted,
-                font=("Segoe UI", 8), justify="left", anchor="nw",
-                wraplength=330, height=3,
-            ).pack(fill="both", expand=True, pady=(0, 10))
-            button = ttk.Button(
-                card, text="ОТКРЫТЬ ЭТАП",
-                command=command, style="PPGU.Primary.TButton",
+                font=("Segoe UI", 9), justify="left", anchor="nw",
+                wraplength=500, height=3,
+            ).pack(fill="both", expand=True, pady=(0, 12))
+            button = NeonStageButton(
+                card, text=button_text, command=command,
+                palette=palette, accent=edge, height=64,
+                font=("Segoe UI", 10, "bold"),
             )
-            button.pack(fill="x")
+            button.pack(fill="x", pady=(4, 0))
             self._action_buttons.append(button)
+
+        # Operational instrument panels use actual runtime configuration and task progress.
+        telemetry = tk.Frame(outer, bg=bg)
+        telemetry.pack(fill="x", pady=(8, 0))
+        for column in range(3):
+            telemetry.grid_columnconfigure(column, weight=1, uniform="telemetry")
+
+        engine_panel = tk.Frame(
+            telemetry, bg=panel_alt, highlightbackground=palette["highlight"],
+            highlightthickness=2, bd=3, relief="raised", padx=12, pady=10,
+        )
+        engine_panel.grid(row=0, column=0, sticky="nsew", padx=4)
+        tk.Label(
+            engine_panel, text="NEON ENGINE  /  PERFORMANCE",
+            bg=panel_alt, fg=accent_glow, font=("Segoe UI", 8, "bold"),
+        ).pack(anchor="w")
+        limit_state = "WINDOWS LIMITS ENFORCED" if self._resource_limits.get("applied") else "BOUNDED SCAN PROFILE"
+        tk.Label(
+            engine_panel, text=limit_state, bg=panel_alt,
+            fg=green if self._resource_limits.get("applied") else amber,
+            font=("Segoe UI", 7, "bold"),
+        ).pack(anchor="w", pady=(5, 4))
+        tk.Label(
+            engine_panel, text=self._performance_profile,
+            bg=panel_alt, fg=text, justify="left", anchor="w",
+            font=("Consolas", 8), wraplength=330,
+        ).pack(fill="x")
+
+        activity_panel = tk.Frame(
+            telemetry, bg=panel_alt, highlightbackground=accent_glow,
+            highlightthickness=2, bd=3, relief="raised", padx=12, pady=10,
+        )
+        activity_panel.grid(row=0, column=1, sticky="nsew", padx=4)
+        tk.Label(
+            activity_panel, text="SCAN TELEMETRY  /  LIVE",
+            bg=panel_alt, fg=accent_glow, font=("Segoe UI", 8, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            activity_panel, textvariable=self._scan_progress_message,
+            bg=panel_alt, fg=text, justify="left", anchor="w",
+            font=("Consolas", 8), wraplength=330,
+        ).pack(fill="x", pady=(6, 5))
+        self._scan_progressbar = ttk.Progressbar(
+            activity_panel, variable=self._scan_progress_value,
+            maximum=100, mode="determinate", style="PPGU.Horizontal.TProgressbar",
+        )
+        self._scan_progressbar.pack(fill="x", ipady=3, pady=(1, 5))
+        tk.Label(
+            activity_panel, text="Heartbeat reports the active WAV while a long file is being analysed.",
+            bg=panel_alt, fg=muted, font=("Segoe UI", 7),
+            wraplength=330, justify="left",
+        ).pack(anchor="w")
+
+        gate_panel = tk.Frame(
+            telemetry, bg=panel_alt, highlightbackground=accent_purple,
+            highlightthickness=2, bd=3, relief="raised", padx=12, pady=10,
+        )
+        gate_panel.grid(row=0, column=2, sticky="nsew", padx=4)
+        tk.Label(
+            gate_panel, text="FACTORY  /  INTEGRITY GATE",
+            bg=panel_alt, fg=accent_glow, font=("Segoe UI", 8, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            gate_panel, text="REVIEWED  +  LICENSE_APPROVED  +  VERIFIED",
+            bg=panel_alt, fg=green, font=("Consolas", 8, "bold"),
+            justify="left", wraplength=330,
+        ).pack(anchor="w", pady=(6, 5))
+        tk.Label(
+            gate_panel,
+            text="Исходники: READ-ONLY   •   Кандидаты: STAGING   •   FACTORY: только подтверждённые материалы",
+            bg=panel_alt, fg=muted, font=("Segoe UI", 8),
+            justify="left", wraplength=330,
+        ).pack(fill="x")
 
         # Persistent activity console: the only always-visible secondary surface.
         log_panel = tk.Frame(
-            outer, bg=lcd_bg, highlightbackground=border,
-            highlightthickness=1, padx=12, pady=9,
+            outer, bg=lcd_bg, highlightbackground=accent_glow,
+            highlightthickness=2, bd=3, relief="sunken", padx=12, pady=9,
         )
         log_panel.pack(fill="both", expand=True, pady=(12, 0))
         log_header = tk.Frame(log_panel, bg=lcd_bg)
@@ -422,8 +527,8 @@ class LibraryManagerApp:
         self.log.configure(state="disabled")
 
         status_panel = tk.Frame(
-            outer, bg=panel_alt, highlightbackground=border,
-            highlightthickness=1, padx=12, pady=8,
+            outer, bg=panel_alt, highlightbackground=palette["highlight"],
+            highlightthickness=2, bd=3, relief="raised", padx=12, pady=8,
         )
         status_panel.pack(fill="x", pady=(9, 0))
         tk.Label(
@@ -434,17 +539,28 @@ class LibraryManagerApp:
             status_panel, textvariable=self.status, bg=panel_alt,
             fg=text, font=("Segoe UI", 8), anchor="w",
         ).pack(side="left", fill="x", expand=True)
-        self._cancel_button = ttk.Button(
+        self._cancel_button = NeonStageButton(
             status_panel, text="ОСТАНОВИТЬ ЗАДАЧУ",
-            command=self.cancel_job, style="PPGU.Danger.TButton", state="disabled",
+            command=self.cancel_job, palette=palette, accent=red,
+            height=42, font=("Segoe UI", 8, "bold"), state="disabled",
         )
         self._cancel_button.pack(side="right", padx=(8, 0))
 
         self._write(
-            "NEON STAGE DEFAULT / SKIN-1 загружена из темы PPGU.\n"
-            "На главном экране — шесть рабочих этапов; вспомогательные инструменты находятся в меню своих разделов.\n"
-            "Оригиналы read-only. В FACTORY допускаются только REVIEWED + LICENSE_APPROVED + VERIFIED материалы.\n"
+            "NEON STAGE DEFAULT / SKIN-1 загружена. Главные операции: IMPORT SAMPLE GUITAR + START SCAN HUNTING.\n"
+            "Все дополнительные инструменты и этапы сохранены в меню разделов.\n"
+            "Оригиналы READ-ONLY. FACTORY: REVIEWED + LICENSE_APPROVED + VERIFIED.\n"
         )
+        if self._resource_limits.get("applied"):
+            self._write(
+                f"[PERFORMANCE] Windows limits enforced: CPU <= {self._resource_limits['cpu_limit_percent']}%, "
+                f"process RAM <= {self._resource_limits['process_memory_limit_gb']} GB."
+            )
+        else:
+            self._write(
+                "[PERFORMANCE] Windows hard limits were not applied: "
+                + str(self._resource_limits.get("reason", "using bounded worker profile"))
+            )
 
     def _copy_log_text(self, value: str) -> None:
         if not value:
@@ -585,6 +701,8 @@ class LibraryManagerApp:
             return
 
         self._job_running = True
+        self._scan_progress_value.set(0.0)
+        self._scan_progress_message.set(title.upper() + "  /  ЗАПУСК")
         self._cancel_event.clear()
         self._active_task_title = title
         task_id = self._task_journal.start(
@@ -628,11 +746,7 @@ class LibraryManagerApp:
             self._error(title, exc, details)
 
     def _queue_progress(self, message: str) -> None:
-        """Persist worker progress and forward it to the Tk main thread."""
-        task_id = self._active_task_id
-        task = self._active_task_title
-        if task_id and task:
-            self._task_journal.progress(task_id, task, message)
+        """Forward worker progress; the Tk thread persists each event once."""
         self._worker_events.put(("progress", message))
 
     def _poll_worker_events(self) -> None:
@@ -660,6 +774,7 @@ class LibraryManagerApp:
                         button.configure(state="normal")
                     self._write("[ОСТАНОВЛЕНО] " + json.dumps(result, ensure_ascii=False, indent=2, default=str))
                     self.status.set(title + ": остановлено; частичные отчёты сохранены")
+                    self._scan_progress_message.set("STOPPED  /  ЧАСТИЧНЫЕ ОТЧЁТЫ СОХРАНЕНЫ")
                 elif kind == "error":
                     _, title, error_text, details = event
                     self._job_running = False
@@ -682,6 +797,8 @@ class LibraryManagerApp:
 
     def _finish(self, title: str, result) -> None:
         self._write(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        self._scan_progress_value.set(100.0)
+        self._scan_progress_message.set("COMPLETE  /  " + title.upper())
         self.status.set(title + ": завершено")
 
     def _error(self, title: str, exc: Exception, details: str) -> None:
@@ -836,14 +953,14 @@ class LibraryManagerApp:
                 write_virtual=False,
                 progress=report_progress,
                 cancel_event=self._cancel_event,
-                workers=1,
+                workers=recommended_scan_workers(),
             )
             return {
                 "quick_scan": quick_result,
                 "deep_inventory": deep_result,
                 "acoustic_analysis_performed": False,
                 "physical_extraction_performed": False,
-                "workers": 1,
+                "workers": recommended_scan_workers(),
                 "source_files_modified": False,
             }
 
@@ -890,7 +1007,7 @@ class LibraryManagerApp:
                 write_virtual=bool(analyze_audio and guitar_confirmed),
                 progress=report_progress,
                 cancel_event=self._cancel_event,
-                workers=1,
+                workers=recommended_scan_workers(),
             )
 
             mode_counts = analysis_result.get("mode_candidate_counts", {})
@@ -1127,6 +1244,12 @@ class LibraryManagerApp:
         self._background("Полный цикл подготовки библиотеки", work)
 
     def _progress(self, message: str) -> None:
+        self._scan_progress_message.set(message[:180])
+        match = re.search(r"Обработка:\s*([\d,]+)\s*/\s*([\d,]+)", message)
+        if match:
+            completed = int(match.group(1).replace(",", ""))
+            total = max(1, int(match.group(2).replace(",", "")))
+            self._scan_progress_value.set(min(99.0, completed * 100.0 / total))
         self._write("[ВЫПОЛНЯЕТСЯ] " + message)
         if self._active_task_id:
             try:
@@ -1528,7 +1651,7 @@ class LibraryManagerApp:
         self._background("Извлечение ритм-паттернов", work)
 
     def open_review_queue(self) -> None:
-        """List staged WAV manifests awaiting independent musical/license review."""
+        """List every staged WAV candidate in the unified approval queue."""
         manifests = sorted((STAGING_ROOT / "manifests").glob("*.json"))
         rows = []
         for path in manifests:
@@ -1544,7 +1667,7 @@ class LibraryManagerApp:
                 rows.append((path, "INVALID_MANIFEST", "ERROR", "ERROR", ""))
 
         window = tk.Toplevel(self.root)
-        window.title("Очередь ручной проверки — Staging")
+        window.title("ОЧЕРЕДЬ ОДОБРЕНИЯ  /  NEON STAGE")
         window.geometry("960x460")
         window.configure(bg=NEON_STAGE_THEME["palette"]["window_bg"])
         window.transient(self.root)
@@ -1565,7 +1688,12 @@ class LibraryManagerApp:
             tree_id = tree.insert("", "end", values=(kind, review, license_status, duration, path.name))
             paths[tree_id] = path
 
-        ttk.Label(frame, text=f"Манифестов: {len(rows)}. Музыкальная проверка и лицензия подтверждаются отдельно.").pack(anchor="w", pady=6)
+        pending_count = sum(1 for row in rows if row[2] != "REVIEWED" or row[3] != "LICENSE_APPROVED")
+        ttk.Label(
+            frame,
+            text=f"Кандидатов в очереди одобрения: {len(rows)}  •  Ожидают решения: {pending_count}. "
+                 "Сканирование и классификация не блокируются статусом лицензии; каждый статус виден отдельно.",
+        ).pack(anchor="w", pady=6)
 
         def selected_manifest() -> Path | None:
             selection = tree.selection()

@@ -4,6 +4,9 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
+from unittest.mock import patch
+
+from audio_analysis import read_mono_pcm
 
 from pitch_events import analyze_pitch_events
 
@@ -50,6 +53,15 @@ class PitchEventTests(unittest.TestCase):
             write_tone(path, [(None, 0.6)])
             result = analyze_pitch_events(path)
             self.assertEqual(result["pitch_events"], [])
+
+    def test_reuses_shared_decoded_audio_without_a_second_source_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tone.wav"
+            write_tone(path, [(440.0, 0.8)])
+            decoded = read_mono_pcm(path, max_samples=100_000)
+            with patch("pitch_events.read_mono_pcm", side_effect=AssertionError("unexpected second WAV read")):
+                result = analyze_pitch_events(path, decoded=decoded)
+            self.assertGreaterEqual(result["pitch_event_candidate_count"], 1)
 
     def test_rejects_invalid_parameters(self):
         with tempfile.TemporaryDirectory() as tmp:

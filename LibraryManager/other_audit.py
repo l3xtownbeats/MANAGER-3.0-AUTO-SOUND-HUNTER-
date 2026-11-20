@@ -15,6 +15,7 @@ import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from performance_profile import HASH_READ_BLOCK_BYTES
 from typing import Any
 
 from asset_classifier import classify_wav
@@ -27,7 +28,7 @@ DECISIONS_NAME = "other_decisions.json"
 def _hash(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
+        for block in iter(lambda: stream.read(HASH_READ_BLOCK_BYTES), b""):
             digest.update(block)
     return digest.hexdigest().upper()
 
@@ -229,7 +230,7 @@ def route_approved_to_other(samples_root: Path, decision_file: Path, *, approve:
         try:
             with source.open("rb") as src, destination.open("xb") as dst:
                 copied = True
-                shutil.copyfileobj(src, dst, 1024 * 1024)
+                shutil.copyfileobj(src, dst, HASH_READ_BLOCK_BYTES)
             if _hash(destination) != entry["sha256"]:
                 raise IOError("OTHER destination SHA-256 mismatch")
             record = {**entry, "asset_id": entry["sha256"][:24], "source_sha256": entry["sha256"],

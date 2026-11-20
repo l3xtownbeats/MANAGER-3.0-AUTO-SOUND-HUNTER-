@@ -3,7 +3,7 @@
 from __future__ import annotations
 import argparse, json, math, statistics
 from pathlib import Path
-from audio_analysis import read_mono_pcm
+from audio_analysis import read_mono_pcm, frame_statistics
 
 def _median(values):
     return statistics.median(values) if values else 0.0
@@ -11,11 +11,7 @@ def _median(values):
 def _envelope(samples, rate, decimation, frame_ms=20, hop_ms=10):
     frame=max(1,round(rate*frame_ms/1000/decimation))
     hop=max(1,round(rate*hop_ms/1000/decimation))
-    env=[]
-    for start in range(0,max(1,len(samples)-frame+1),hop):
-        chunk=samples[start:start+frame]
-        if len(chunk)!=frame: break
-        env.append(math.sqrt(sum(x*x for x in chunk)/frame))
+    env, _zcr = frame_statistics(samples, frame, hop)
     return env,hop_ms/1000.0
 
 def _onsets(env, dt):
@@ -38,12 +34,12 @@ def _regularity(onsets):
     mean=statistics.fmean(intervals)
     return max(0.0,min(1.0,1.0-statistics.pstdev(intervals)/mean)) if mean else 0.0
 
-def _pitch_evidence(path):
+def _pitch_evidence(path, decoded=None):
     # Optional monophonic tracker: pitch hypotheses enrich subtype classification,
     # but never override the need for listening/review on polyphonic guitar.
     try:
         from pitch_events import analyze_pitch_events
-        result=analyze_pitch_events(path)
+        result=analyze_pitch_events(path, decoded=decoded)
         events=result.get("pitch_events",[])
         notes=[e["midi_note_candidate"] for e in events]
         unique=[]
@@ -58,9 +54,11 @@ def _pitch_evidence(path):
 
 def classify_wav(path: Path, short_max_seconds: float=1.25,
                  long_min_seconds: float=1.5, analyze_pitch: bool=True,
-                 max_samples: int=90_000) -> dict:
+                 max_samples: int=90_000, decoded=None) -> dict:
     path=Path(path)
-    samples,rate,frames,channels,width,decimation=read_mono_pcm(path, max_samples=max_samples)
+    samples,rate,frames,channels,width,decimation=(
+        decoded if decoded is not None else read_mono_pcm(path, max_samples=max_samples)
+    )
     if rate<=0 or frames<=0 or not samples: raise ValueError("Empty or invalid WAV")
     duration=frames/rate
     env,dt=_envelope(samples,rate,decimation)
@@ -68,7 +66,7 @@ def classify_wav(path: Path, short_max_seconds: float=1.25,
     active=[x for x in env if x>max(0.003,peak*0.025)]
     onsets=_onsets(env,dt) if peak>=0.003 and active else []
     regularity=_regularity(onsets)
-    pitch=(_pitch_evidence(path) if duration <= 45.0 else {"events":[],"note_sequence":[],"distinct_pitch_count":0,"pitch_tracker":"SKIPPED_LONG_FILE_LOW_LOAD"}) if analyze_pitch and peak>=0.003 else {
+    pitch=(_pitch_evidence(path, decoded=decoded) if duration <= 45.0 else {"events":[],"note_sequence":[],"distinct_pitch_count":0,"pitch_tracker":"SKIPPED_LONG_FILE_LOW_LOAD"}) if analyze_pitch and peak>=0.003 else {
         "events":[],"note_sequence":[],"distinct_pitch_count":0,"pitch_tracker":"SKIPPED"}
     note_sequence=pitch["note_sequence"]
     distinct=pitch["distinct_pitch_count"]

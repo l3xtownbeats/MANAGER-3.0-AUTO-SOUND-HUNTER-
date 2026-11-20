@@ -33,12 +33,14 @@ def _read_with_soundfile(path: Path, max_samples: int):
         values = []
         absolute = 0
         while True:
-            block = audio.read(65536, dtype="float32", always_2d=True)
+            block = audio.read(131072, dtype="float32", always_2d=True)
             if block.size == 0: break
             mono = block.mean(axis=1, dtype=np.float64)
             first = (-absolute) % hop
             if first < len(mono):
-                values.extend(float(v) for v in mono[first::hop])
+                # Convert each decimated NumPy slice in C instead of running a
+                # Python generator for every retained sample.
+                values.extend(mono[first::hop].tolist())
             absolute += len(mono)
         subtype = audio.subtype or "UNKNOWN"
         fmt = audio.format or path.suffix.lstrip(".").upper()
@@ -82,36 +84,80 @@ def _audio_metadata(path: Path):
 def _autocorrelation_pitch(samples, rate):
     if len(samples) < 128: return None
     step = max(1, len(samples) // 4096); x = samples[::step][:4096]; sr = rate / step
-    mean = sum(x) / len(x); x = [v - mean for v in x]
     min_lag = max(2, int(sr / 1200)); max_lag = min(len(x)//2, int(sr/65))
     if max_lag <= min_lag: return None
-    best_lag, best = None, 0.0; energy = sum(v*v for v in x)
-    if energy < 1e-10: return None
-    for lag in range(min_lag, max_lag+1):
-        corr = sum(x[i]*x[i+lag] for i in range(len(x)-lag))/energy
-        if corr > best: best, best_lag = corr, lag
+    best_lag, best = None, 0.0
+    try:
+        import numpy as np
+        signal = np.asarray(x, dtype=np.float64)
+        signal -= signal.mean()
+        energy = float(np.dot(signal, signal))
+        if energy < 1e-10: return None
+        for lag in range(min_lag, max_lag + 1):
+            corr = float(np.dot(signal[:-lag], signal[lag:])) / energy
+            if corr > best:
+                best, best_lag = corr, lag
+    except ImportError:
+        mean = sum(x) / len(x)
+        centered = [v - mean for v in x]
+        energy = sum(v*v for v in centered)
+        if energy < 1e-10: return None
+        for lag in range(min_lag, max_lag+1):
+            corr = sum(centered[i]*centered[i+lag] for i in range(len(centered)-lag))/energy
+            if corr > best: best, best_lag = corr, lag
     if best_lag is None or best < .35: return None
     hz = sr/best_lag; midi = round(69+12*math.log2(hz/440.0))
     names=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
     return {"frequency_hz":round(hz,2),"midi_note":midi,"note_name":names[midi%12]+str(midi//12-1),"confidence":round(min(1.,best),3)}
 
-def analyse_wav(path: Path, frame_ms: int = 20, hop_ms: int = 10, max_samples: int = 90_000) -> dict:
-    """Analyze a bounded, decimated mono view; 90k samples is the low-load default.
+def frame_statistics(samples, frame: int, hop: int):
+    """Return RMS and zero-crossing arrays using NumPy's native vector loops."""
+    if frame <= 0 or hop <= 0:
+        raise ValueError("Frame and hop sizes must be positive")
+    try:
+        import numpy as np
+        signal = np.asarray(samples, dtype=np.float32)
+        if len(signal) < frame:
+            return [], []
+        windows = np.lib.stride_tricks.sliding_window_view(signal, frame)[::hop]
+        rms = np.sqrt(
+            np.einsum("ij,ij->i", windows, windows, dtype=np.float64) / frame
+        )
+        crossings = np.count_nonzero(
+            (windows[:, :-1] < 0) != (windows[:, 1:] < 0), axis=1
+        )
+        zcr = crossings / max(1, frame - 1)
+        return rms.tolist(), zcr.tolist()
+    except ImportError:
+        rms, zcr = [], []
+        for start in range(0, max(1, len(samples) - frame + 1), hop):
+            chunk = samples[start:start + frame]
+            if len(chunk) < frame:
+                break
+            rms.append(math.sqrt(sum(v * v for v in chunk) / frame))
+            zcr.append(
+                sum(1 for a, b in zip(chunk, chunk[1:]) if (a < 0) != (b < 0))
+                / max(1, frame - 1)
+            )
+        return rms, zcr
 
-    Callers may raise max_samples for a focused second-pass analysis of selected
-    assets. The discovery pass should stay responsive on dual-core/8GB PCs.
+
+def analyse_wav(path: Path, frame_ms: int = 20, hop_ms: int = 10,
+                max_samples: int = 90_000, decoded=None) -> dict:
+    """Analyze a bounded, decimated mono view.
+
+    The optional decoded argument accepts read_mono_pcm's six-field result.
+    Sharing it with the classifier and pitch tracker avoids repeated full-file
+    reads from a mechanical source drive.
     """
-    samples, rate, frames, channels, width, decimation = read_mono_pcm(path, max_samples=max_samples)
+    samples, rate, frames, channels, width, decimation = (
+        decoded if decoded is not None else read_mono_pcm(path, max_samples=max_samples)
+    )
     fmt, subtype, backend = _audio_metadata(Path(path))
     if rate <= 0 or not samples: raise ValueError("Empty or invalid audio")
     frame=max(32,round(rate*frame_ms/1000/decimation)); hop=max(1,round(rate*hop_ms/1000/decimation))
-    rms,zcr,times=[],[],[]
-    for start in range(0,max(1,len(samples)-frame+1),hop):
-        chunk=samples[start:start+frame]
-        if len(chunk)<frame: break
-        rms.append(math.sqrt(sum(v*v for v in chunk)/frame))
-        zcr.append(sum(1 for a,b in zip(chunk,chunk[1:]) if (a<0)!=(b<0))/max(1,frame-1))
-        times.append(start*decimation/rate)
+    rms,zcr=frame_statistics(samples,frame,hop)
+    times=[start*decimation/rate for start in range(0,max(1,len(samples)-frame+1),hop)][:len(rms)]
     if not rms: rms,zcr,times=[0.],[0.],[0.]
     peak=max((abs(v) for v in samples),default=0.); mean_rms=statistics.fmean(rms)
     onset=[max(0.,rms[i]-rms[i-1]) for i in range(1,len(rms))]
@@ -133,7 +179,7 @@ def analyse_wav(path: Path, frame_ms: int = 20, hop_ms: int = 10, max_samples: i
         "analysis_version":"0.4.0","source":str(Path(path).resolve()),
         "duration_seconds":round(frames/rate,6),"sample_rate":rate,"channels":channels,
         "sample_width_bytes":width,"container_format":fmt,"codec_subtype":subtype,
-        "decoder_backend":backend,"analysis_decimation":decimation,"analysis_sample_cap":max_samples,"decoder_block_frames":65536,
+        "decoder_backend":backend,"analysis_decimation":decimation,"analysis_sample_cap":max_samples,"decoder_block_frames":131072,
         "level":{"peak":round(peak,6),"mean_frame_rms":round(mean_rms,6),"rms_min":round(min(rms),6),"rms_max":round(max(rms),6)},
         "zero_crossing_rate_mean":round(statistics.fmean(zcr),6),"tempo_candidate_bpm":tempo,
         "dominant_pitch_candidate":pitch,"onset_evidence_seconds":onset_candidates,

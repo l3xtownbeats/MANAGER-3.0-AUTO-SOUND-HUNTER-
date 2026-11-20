@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from performance_profile import HASH_READ_BLOCK_BYTES
 from typing import Any
 
 from audio_analysis import analyse_wav
@@ -22,7 +23,7 @@ VERSION = "0.1.0"
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
+        for block in iter(lambda: stream.read(HASH_READ_BLOCK_BYTES), b""):
             digest.update(block)
     return digest.hexdigest().upper()
 
