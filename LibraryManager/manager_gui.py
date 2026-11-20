@@ -96,17 +96,17 @@ class LibraryManagerApp:
     def _build(self) -> None:
         """Build the NEON STAGE Manager workspace with the two approved primary actions."""
         palette = NEON_STAGE_THEME["palette"]
-        bg = "#01040D"
-        panel = "#061225"
-        panel_alt = "#0A1B34"
-        inset = "#020A18"
+        bg = "#0b0b0d"
+        panel = "#121216"
+        panel_alt = "#191920"
+        inset = "#0f0f11"
         text = "#F4F8FF"
         muted = "#AFC2DC"
         dim = "#7086A5"
-        cyan = "#00C8FF"
-        blue = "#087DFF"
-        purple = "#7A23D4"
-        magenta = "#F12BCB"
+        cyan = "#d45cff"
+        blue = "#b300ff"
+        purple = "#8d16c5"
+        magenta = "#e044ff"
         green = "#58EF9A"
         amber = "#FFC857"
         red = "#FF597C"
@@ -272,7 +272,7 @@ class LibraryManagerApp:
         source_panel.pack(fill="x", pady=(0, 7))
         self.samples_entry = tk.Entry(
             source_panel.body, textvariable=self.samples_root,
-            bg="#000817", fg=text, insertbackground=cyan,
+            bg="#0f0f11", fg=text, insertbackground=cyan,
             relief="sunken", bd=2, highlightthickness=1,
             highlightbackground="#174B80", highlightcolor=cyan,
             font=("Consolas", 8), readonlybackground="#000817",
@@ -305,12 +305,12 @@ class LibraryManagerApp:
             ).zoom(2, 2)
             tk.Label(
                 hero_panel.body, image=self._banner_photo,
-                bg="#000817", bd=0, padx=0, pady=0,
+                bg="#0f0f11", bd=0, padx=0, pady=0,
             ).pack(fill="x", expand=True)
         except (OSError, tk.TclError, ValueError) as exc:
             # A damaged artwork file must never prevent core library work.
             fallback = tk.Canvas(
-                hero_panel.body, height=136, bg="#000817",
+                hero_panel.body, height=136, bg="#0f0f11",
                 highlightthickness=1, highlightbackground="#174B80",
             )
             fallback.pack(fill="x")
@@ -413,11 +413,11 @@ class LibraryManagerApp:
             tag="", accent=blue,
         )
         log_panel.pack(fill="both", expand=True, padx=7, pady=(0, 6))
-        log_frame = tk.Frame(log_panel.body, bg="#000817")
+        log_frame = tk.Frame(log_panel.body, bg="#0f0f11")
         log_frame.pack(fill="both", expand=True)
         self.log = tk.Text(
             log_frame, wrap="word", height=2, font=("Consolas", 8),
-            bg="#000817", fg="#9DEFFF", insertbackground=cyan,
+            bg="#0f0f11", fg="#efcaff", insertbackground=cyan,
             selectbackground="#164C87", relief="sunken", bd=2,
             padx=9, pady=7, borderwidth=2, highlightthickness=1,
             highlightbackground="#174B80", exportselection=True, undo=False,
@@ -436,13 +436,13 @@ class LibraryManagerApp:
         self.log.configure(state="disabled")
 
         footer = tk.Frame(
-            deck, bg="#07172C", bd=2, relief="sunken",
+            deck, bg="#121216", bd=2, relief="sunken",
             highlightbackground="#2B6395", highlightthickness=1,
             padx=9, pady=5,
         )
         footer.pack(fill="x", padx=7, pady=(0, 7))
         tk.Label(
-            footer, textvariable=self.status, bg="#07172C",
+            footer, textvariable=self.status, bg="#121216",
             fg=text, font=("Segoe UI", 8), anchor="w",
         ).pack(side="left", fill="x", expand=True)
 
