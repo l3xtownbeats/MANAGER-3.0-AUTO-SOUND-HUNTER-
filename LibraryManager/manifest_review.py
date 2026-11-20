@@ -9,6 +9,7 @@ import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from performance_profile import HASH_READ_BLOCK_BYTES
 from typing import Any
 
 from factory_curator import INSTRUMENTS, ROLES, STYLES, TONES
@@ -19,7 +20,7 @@ from plugin_asset_catalog import MODE_ORDER
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
+        for block in iter(lambda: stream.read(HASH_READ_BLOCK_BYTES), b""):
             digest.update(block)
     return digest.hexdigest().upper()
 
