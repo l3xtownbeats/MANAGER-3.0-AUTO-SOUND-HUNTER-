@@ -2228,7 +2228,8 @@ class LibraryManagerApp:
             return
 
         def work():
-            return review_manifest(
+            # Save the operator's explicit musical + license decision first.
+            review_result = review_manifest(
                 Path(selected), STAGING_ROOT,
                 style_family=style.strip().upper(),
                 instrument_family=instrument.strip().upper(),
@@ -2246,7 +2247,25 @@ class LibraryManagerApp:
                 confirmed_velocity_layer=velocity_layer,
                 advanced_metadata=advanced_metadata,
             )
-        self._background("Музыкальная и лицензионная проверка WAV", work)
+            self._queue_progress(
+                "Проверка сохранена. Автоматически направляю все кандидаты, "
+                "которые прошли REVIEWED + LICENSE_APPROVED + SHA-256/PCM проверки, в FACTORY."
+            )
+            # Previously the user had to discover and run BUILD LIBRARY ->
+            # Distribute approved assets manually after every review. Promote
+            # immediately after review, but retain all independent safety gates.
+            samples = self._samples()
+            distribution_result = auto_distribute_approved(
+                samples, STAGING_ROOT, approve=True,
+                journal_path=samples / "FACTORY" / "LibraryManagerReports" / "operations.jsonl",
+                cancel_event=self._cancel_event,
+                progress=self._queue_progress,
+            )
+            return {
+                "review": review_result,
+                "factory_distribution": distribution_result,
+            }
+        self._background("Проверка WAV и загрузка одобренного в FACTORY", work)
 
     def finalize_library(self) -> None:
         """Audit staging and distributed Factory without moving or copying assets."""
