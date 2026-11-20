@@ -279,8 +279,10 @@ def auto_distribute_approved(
     journal_path: Path | None = None,
     cancel_event: Any = None,
     progress=None,
+    manifest_paths: list[Path] | None = None,
+    finalize: bool = True,
 ) -> dict[str, Any]:
-    """Process every staging manifest independently; bad assets never block later ones.
+    """Process staging manifests independently; bad assets never block later ones.
 
     Only manifests that pass the existing musical-review, license, provenance,
     PCM, bounds and SHA-256 gates are copied. Each asset is its own transaction:
@@ -291,7 +293,11 @@ def auto_distribute_approved(
     samples = Path(samples_root).resolve()
     staging = Path(staging_root).resolve()
     manifests_dir = staging / "manifests"
-    manifests = sorted(manifests_dir.glob("*.json")) if manifests_dir.is_dir() else []
+    manifests = (
+        sorted(Path(path) for path in manifest_paths)
+        if manifest_paths is not None
+        else (sorted(manifests_dir.glob("*.json")) if manifests_dir.is_dir() else [])
+    )
     journal = journal_path or (
         samples / "FACTORY" / "LibraryManagerReports" / "operations.jsonl"
     )
@@ -394,7 +400,7 @@ def auto_distribute_approved(
 
     finalization = None
     finalization_error = None
-    if not cancelled:
+    if not cancelled and finalize:
         try:
             from finalization import finalize_library
             finalization = finalize_library(
