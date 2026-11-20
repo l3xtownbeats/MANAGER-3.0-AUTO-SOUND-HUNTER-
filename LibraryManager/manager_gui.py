@@ -37,7 +37,7 @@ from library_operations import (
     auto_distribute_approved,
 )
 from ppgu_theme import NEON_STAGE_THEME, configure_neon_stage_ttk
-from neon_stage_widgets import VstPanel, NeonActionButton, NeonBadge
+from neon_stage_widgets import VstPanel, NeonActionButton
 from neon_stage_dialogs import NeonStageDialogs
 from manager_ui_feedback import build_import_completion_summary
 
@@ -217,10 +217,6 @@ class LibraryManagerApp:
         top_row.pack(fill="x")
         brand = tk.Frame(top_row, bg=inset)
         brand.pack(side="left", fill="x", expand=True)
-        self._operation_badge = NeonBadge(
-            top_row, "IDLE  /  READY", color=green,
-        )
-        self._operation_badge.pack(side="right", padx=(8, 0), pady=5)
         # Compact top-right utility rail. Each icon opens a real Manager
         # destination; no decorative or non-functional account controls.
         utility_rail = tk.Frame(top_row, bg=inset)
