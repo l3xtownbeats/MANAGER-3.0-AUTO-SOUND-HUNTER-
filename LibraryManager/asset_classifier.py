@@ -3,7 +3,7 @@
 from __future__ import annotations
 import argparse, json, math, statistics
 from pathlib import Path
-from audio_analysis import read_mono_pcm
+from audio_analysis import read_mono_pcm, frame_statistics
 
 def _median(values):
     return statistics.median(values) if values else 0.0
@@ -11,11 +11,7 @@ def _median(values):
 def _envelope(samples, rate, decimation, frame_ms=20, hop_ms=10):
     frame=max(1,round(rate*frame_ms/1000/decimation))
     hop=max(1,round(rate*hop_ms/1000/decimation))
-    env=[]
-    for start in range(0,max(1,len(samples)-frame+1),hop):
-        chunk=samples[start:start+frame]
-        if len(chunk)!=frame: break
-        env.append(math.sqrt(sum(x*x for x in chunk)/frame))
+    env, _zcr = frame_statistics(samples, frame, hop)
     return env,hop_ms/1000.0
 
 def _onsets(env, dt):
