@@ -19,6 +19,7 @@ from typing import Any
 from audio_range_io import audio_source_info, write_pcm_wav_range
 
 from app_paths import runtime_staging_root
+from performance_profile import HASH_READ_BLOCK_BYTES
 
 STAGING_BASE = runtime_staging_root(__file__)
 
@@ -30,7 +31,7 @@ DEFAULT_HOP_MS = 10
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
+        for block in iter(lambda: stream.read(HASH_READ_BLOCK_BYTES), b""):
             digest.update(block)
     return digest.hexdigest().upper()
 
@@ -127,7 +128,7 @@ def _frame_levels(source: Path, window_ms: int, hop_ms: int) -> tuple[list[dict[
         levels: list[dict[str, float]] = []
         # Read large sequential chunks. Only a window-sized overlap is retained
         # between chunks; no full-file PCM allocation is made.
-        chunk_frames = max(65_536, window * 4)
+        chunk_frames = max(262_144, window * 4)
         buffer = np.empty(0, dtype=np.float32)
         buffer_start = 0
         frames_read = 0
