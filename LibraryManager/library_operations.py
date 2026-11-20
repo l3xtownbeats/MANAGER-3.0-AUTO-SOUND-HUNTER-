@@ -358,7 +358,6 @@ def auto_distribute_approved(
                 approve=True,
                 journal_path=journal,
                 cancel_event=cancel_event,
-                source_hash_cache=verified_source_hashes,
             )
             results.extend(result.get("results", []))
         except Exception as exc:
