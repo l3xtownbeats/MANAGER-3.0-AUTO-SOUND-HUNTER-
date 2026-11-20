@@ -11,7 +11,7 @@ import queue
 import threading
 import traceback
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, ttk
 from pathlib import Path
 
 from app_paths import resolve_runtime_paths, resource_file
@@ -36,6 +36,7 @@ from library_operations import (
     auto_distribute_approved,
 )
 from ppgu_theme import NEON_STAGE_THEME, resource_path, configure_neon_stage_ttk
+from neon_stage_dialogs import NeonStageDialogs
 
 APP_VERSION = "3.0.0"
 BUNDLE_DIR, MANAGER_DIR, PORTABLE_MODE = resolve_runtime_paths(__file__)
@@ -49,6 +50,7 @@ STAGING_ROOT.mkdir(parents=True, exist_ok=True)
 class LibraryManagerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
+        self.dialogs = NeonStageDialogs(root, NEON_STAGE_THEME["palette"])
         self.root.title(f"POP PUNK GUITAR LIBRARY MANAGER {APP_VERSION}")
         self.root.geometry("980x680")
         self.root.minsize(760, 520)
@@ -238,6 +240,15 @@ class LibraryManagerApp:
 
         outer = tk.Frame(self.root, bg=bg)
         outer.pack(fill="both", expand=True, padx=20, pady=16)
+
+        # Four-part NEON STAGE light rail echoes the plugin's signature trim.
+        stage_rail = tk.Frame(outer, bg=bg, height=4)
+        stage_rail.pack(fill="x", pady=(0, 12))
+        stage_rail.pack_propagate(False)
+        for rail_color in (accent, accent_glow, accent_purple, accent_magenta):
+            tk.Frame(stage_rail, bg=rail_color, height=4).pack(
+                side="left", fill="both", expand=True
+            )
 
         # Premium brand header, using the actual PPGU NEON STAGE hero asset.
         header = tk.Frame(outer, bg=bg)
@@ -542,7 +553,7 @@ class LibraryManagerApp:
             self.status.set("Папка библиотеки сохранена.")
             self._write(f"Путь Samples сохранён: {selected}")
         except OSError as exc:
-            messagebox.showwarning(
+            self.dialogs.showwarning(
                 "Настройки",
                 f"Папка выбрана на этот запуск, но путь не удалось сохранить: {exc}",
             )
@@ -572,7 +583,7 @@ class LibraryManagerApp:
             try:
                 self._save_settings()
             except OSError as exc:
-                messagebox.showwarning(
+                self.dialogs.showwarning(
                     "Настройки",
                     f"Папка выбрана на этот запуск, но путь не удалось сохранить: {exc}",
                 )
@@ -670,7 +681,7 @@ class LibraryManagerApp:
                     self._write(f"[ОШИБКА] {error_text}")
                     self._write(details)
                     self.status.set(title + ": ошибка")
-                    messagebox.showerror("Ошибка", error_text)
+                    self.dialogs.showerror("Ошибка", error_text)
         except queue.Empty:
             pass
         finally:
@@ -687,7 +698,7 @@ class LibraryManagerApp:
     def _error(self, title: str, exc: Exception, details: str) -> None:
         self._write(details)
         self.status.set(title + ": ошибка")
-        messagebox.showerror("Ошибка", f"{type(exc).__name__}: {exc}")
+        self.dialogs.showerror("Ошибка", f"{type(exc).__name__}: {exc}")
 
     def cancel_job(self) -> None:
         if self._job_running:
@@ -739,7 +750,7 @@ class LibraryManagerApp:
         try:
             incoming = self._prepare_import_target()
         except Exception as exc:
-            messagebox.showerror("IMPORT GUITAR — папка библиотеки", str(exc), parent=self.root)
+            self.dialogs.showerror("IMPORT GUITAR — папка библиотеки", str(exc), parent=self.root)
             return
         if incoming is None:
             self.status.set("IMPORT GUITAR: папка Samples не выбрана.")
@@ -752,7 +763,7 @@ class LibraryManagerApp:
                 ("Все файлы", "*.*"),
             ],
         ))
-        while messagebox.askyesno(
+        while self.dialogs.askyesno(
             "IMPORT GUITAR",
             "Добавить целую папку библиотеки? Можно добавить несколько папок подряд.",
             parent=self.root,
@@ -765,7 +776,7 @@ class LibraryManagerApp:
             self.status.set("IMPORT GUITAR: источники не выбраны.")
             return
 
-        if not messagebox.askyesno(
+        if not self.dialogs.askyesno(
             "Подтверждение импорта",
             f"Менеджер создаст проверенные копии выбранных файлов в:\n{incoming}\n\n"
             "Оригиналы останутся на прежнем месте и не будут изменены, перемещены или удалены. "
@@ -796,7 +807,7 @@ class LibraryManagerApp:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
 
         def work():
@@ -815,7 +826,7 @@ class LibraryManagerApp:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
 
         def work():
@@ -857,12 +868,12 @@ class LibraryManagerApp:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
         analyze_audio = self.analyze_audio.get()
         guitar_confirmed = self.guitar_confirmed.get()
         if analyze_audio and not guitar_confirmed:
-            guitar_confirmed = messagebox.askyesno(
+            guitar_confirmed = self.dialogs.askyesno(
                 "Подтверждение гитарного источника",
                 "Подтверждаете, что выбранная библиотека предназначена для гитарного плагина "
                 "и уже очищена от Piano / Bell / Drum материалов?\n\n"
@@ -1150,7 +1161,7 @@ class LibraryManagerApp:
                 )
             self._write(f"Полный журнал: {self._task_journal.path}")
         except OSError as exc:
-            messagebox.showerror("История задач", str(exc))
+            self.dialogs.showerror("История задач", str(exc))
 
     def preview_audio(self) -> None:
         selected = filedialog.askopenfilename(
@@ -1165,7 +1176,7 @@ class LibraryManagerApp:
             self._write("Предпрослушивание: " + selected)
             self.status.set("Воспроизведение WAV")
         except Exception as exc:
-            messagebox.showerror("Предпрослушивание", f"Не удалось воспроизвести WAV: {exc}")
+            self.dialogs.showerror("Предпрослушивание", f"Не удалось воспроизвести WAV: {exc}")
 
     def stop_preview(self) -> None:
         try:
@@ -1173,7 +1184,7 @@ class LibraryManagerApp:
             winsound.PlaySound(None, 0)
             self.status.set("Воспроизведение остановлено")
         except Exception as exc:
-            messagebox.showerror("Предпрослушивание", str(exc))
+            self.dialogs.showerror("Предпрослушивание", str(exc))
 
     def build_plugin_catalog(self) -> None:
         """Build a validated plugin catalog from existing staged WAV manifests."""
@@ -1239,7 +1250,7 @@ class LibraryManagerApp:
         """Show the 12-tone data map used by AutoChords inside the VST3 PATTERN mode."""
         sharp = "  ".join(item["canonical_name"] for item in chromatic_note_table(spelling="sharp"))
         flat = "  ".join(item["canonical_name"] for item in chromatic_note_table(spelling="flat"))
-        messagebox.showinfo(
+        self.dialogs.showinfo(
             "PPGU — 12-нотная карта для AutoChords внутри PATTERN",
             "Все 12 хроматических высот сохраняются и доступны для исполнения.\n\n"
             f"Диезы: {sharp}\n\nБемоли: {flat}\n\n"
@@ -1252,7 +1263,7 @@ class LibraryManagerApp:
     def open_pattern_song_library(self) -> None:
         """Edit song-grouped Pattern Instrument metadata; WAV sources remain untouched."""
         path = MANAGER_DIR / "reports" / "pattern_song_library.json"
-        open_pattern_song_manager(self.root, path)
+        open_pattern_song_manager(self.root, path, dialogs=self.dialogs)
 
     def open_plugin_browser(self) -> None:
         """Browse the latest plugin catalog and audition staged WAV candidates."""
@@ -1263,7 +1274,7 @@ class LibraryManagerApp:
             reverse=True,
         )
         if not catalogs:
-            messagebox.showinfo(
+            self.dialogs.showinfo(
                 "Sample Browser",
                 "Каталог ассетов для VST3 ещё не создан. Сначала выполните START HUNTING "
                 "или выберите «Собрать каталог ассетов PPGU» в меню BUILD LIBRARY.",
@@ -1273,15 +1284,15 @@ class LibraryManagerApp:
         try:
             catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            messagebox.showerror("Sample Browser", f"Не удалось прочитать каталог: {exc}")
+            self.dialogs.showerror("Sample Browser", f"Не удалось прочитать каталог: {exc}")
             return
 
-        window = tk.Toplevel(self.root)
-        window.title("POP PUNK GUITAR ULTIMATE — Sample Browser / подготовленные категории библиотеки")
-        window.geometry("1120x650")
-        window.configure(bg=NEON_STAGE_THEME["palette"]["window_bg"])
-        window.transient(self.root)
-        frame = ttk.Frame(window, padding=10)
+        window, window_content, window_footer = self.dialogs.create_window(
+            "Sample Browser  /  подготовленные категории библиотеки",
+            "VST3 ASSET CATALOG  •  REVIEW / LICENSE / PLAYBACK STATUS",
+            "1120x650",
+        )
+        frame = ttk.Frame(window_content, padding=10)
         frame.pack(fill="both", expand=True)
 
         top = ttk.Frame(frame)
@@ -1384,12 +1395,12 @@ class LibraryManagerApp:
         def preview_selected():
             selection = tree.selection()
             if not selection:
-                messagebox.showinfo("Предпрослушивание", "Выберите WAV-кандидат.", parent=window)
+                self.dialogs.showinfo("Предпрослушивание", "Выберите WAV-кандидат.", parent=window)
                 return
             record = item_records[selection[0]]
             relative = record.get("asset_file")
             if not relative:
-                messagebox.showinfo(
+                self.dialogs.showinfo(
                     "Предпрослушивание",
                     "Это аналитический кандидат без извлечённого WAV. Сначала выполните извлечение.",
                     parent=window,
@@ -1399,10 +1410,10 @@ class LibraryManagerApp:
             try:
                 audio.relative_to(STAGING_ROOT.resolve())
             except ValueError:
-                messagebox.showerror("Предпрослушивание", "Путь WAV выходит за пределы staging.", parent=window)
+                self.dialogs.showerror("Предпрослушивание", "Путь WAV выходит за пределы staging.", parent=window)
                 return
             if not audio.is_file() or audio.suffix.lower() not in {".wav", ".wave"}:
-                messagebox.showerror("Предпрослушивание", f"WAV не найден: {audio}", parent=window)
+                self.dialogs.showerror("Предпрослушивание", f"WAV не найден: {audio}", parent=window)
                 return
             try:
                 import winsound
@@ -1411,7 +1422,7 @@ class LibraryManagerApp:
                 self.status.set("Предпрослушивание staging WAV-кандидата")
                 self._write(f"[SAMPLE BROWSER] Предпрослушивание: {audio}")
             except Exception as exc:
-                messagebox.showerror("Предпрослушивание", str(exc), parent=window)
+                self.dialogs.showerror("Предпрослушивание", str(exc), parent=window)
 
         mode_box.bind("<<ComboboxSelected>>", refresh_mode)
         tree.bind("<<TreeviewSelect>>", show_selected)
@@ -1426,12 +1437,20 @@ class LibraryManagerApp:
                  "Все остальные записи остаются кандидатами.",
         ).pack(anchor="w", pady=(6, 0))
         refresh_mode()
+        ttk.Label(
+            window_footer,
+            text="PLAYABLE = REVIEWED + LICENSE_APPROVED + VERIFIED",
+        ).pack(side="left")
+        ttk.Button(
+            window_footer, text="ЗАКРЫТЬ",
+            style="PPGU.DialogSecondary.TButton", command=window.destroy,
+        ).pack(side="right")
 
     def audit_other(self) -> None:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
         report_dir = MANAGER_DIR / "reports" / ("other_audit_" + __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S"))
         self._background("Аудит OTHER", lambda: audit_other_library(samples, report_dir))
@@ -1440,7 +1459,7 @@ class LibraryManagerApp:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
         decision_file = filedialog.askopenfilename(
             title="Выберите вручную проверенный other_decisions.json",
@@ -1452,13 +1471,13 @@ class LibraryManagerApp:
         try:
             plan = route_approved_to_other(samples, Path(decision_file), approve=False)
         except Exception as exc:
-            messagebox.showerror("План OTHER", str(exc))
+            self.dialogs.showerror("План OTHER", str(exc))
             return
         preview = "\n".join(f'{item["source_path"]} → {item["destination_path"]} ({item["reason"]})' for item in plan["entries"])
         self._write("ПЛАН OTHER (без изменений):\n" + (preview or "Нет явно одобренных записей."))
         if not plan["entries"]:
             return
-        if not messagebox.askyesno("Подтверждение копирования в OTHER",
+        if not self.dialogs.askyesno("Подтверждение копирования в OTHER",
                                    f"Будет скопировано файлов: {len(plan['entries'])}.\nSHA-256 проверяется; оригиналы останутся на месте. Продолжить?"):
             return
         self._background("Копирование в OTHER", lambda: route_approved_to_other(
@@ -1481,14 +1500,14 @@ class LibraryManagerApp:
                 if (item.get("pattern_analysis") or {}).get("pattern_analysis", {}).get("patterns")
             ]
             if not eligible:
-                messagebox.showinfo("Паттерны не найдены",
+                self.dialogs.showinfo("Паттерны не найдены",
                                     "В отчёте нет повторяющихся ритмических кандидатов для извлечения.")
                 return
             total = sum(
                 len(item["pattern_analysis"]["pattern_analysis"]["patterns"])
                 for item in eligible
             )
-            if not messagebox.askyesno(
+            if not self.dialogs.askyesno(
                 "Физическое извлечение WAV",
                 f"Найдено исходных файлов с кандидатами: {len(eligible)}.\n"
                 f"Кандидатов паттернов: {total}.\n"
@@ -1499,7 +1518,7 @@ class LibraryManagerApp:
             ):
                 return
         except Exception as exc:
-            messagebox.showerror("Отчёт анализа", str(exc))
+            self.dialogs.showerror("Отчёт анализа", str(exc))
             return
 
         def work():
@@ -1543,12 +1562,12 @@ class LibraryManagerApp:
             except (OSError, json.JSONDecodeError):
                 rows.append((path, "INVALID_MANIFEST", "ERROR", "ERROR", ""))
 
-        window = tk.Toplevel(self.root)
-        window.title("Очередь ручной проверки — Staging")
-        window.geometry("960x460")
-        window.configure(bg=NEON_STAGE_THEME["palette"]["window_bg"])
-        window.transient(self.root)
-        frame = ttk.Frame(window, padding=10)
+        window, window_content, window_footer = self.dialogs.create_window(
+            "REVIEW QUEUE  /  ручная проверка Staging",
+            "HUMAN REVIEW CONSOLE  •  ORIGINAL / DERIVED WAV / LICENSE",
+            "960x460",
+        )
+        frame = ttk.Frame(window_content, padding=10)
         frame.pack(fill="both", expand=True)
         columns = ("kind", "review", "license", "duration", "manifest")
         tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="browse")
@@ -1570,7 +1589,7 @@ class LibraryManagerApp:
         def selected_manifest() -> Path | None:
             selection = tree.selection()
             if not selection:
-                messagebox.showinfo("Очередь проверки", "Сначала выберите WAV-манифест.", parent=window)
+                self.dialogs.showinfo("Очередь проверки", "Сначала выберите WAV-манифест.", parent=window)
                 return None
             return paths[selection[0]]
 
@@ -1600,7 +1619,7 @@ class LibraryManagerApp:
                 self._write(f"Предпрослушивание {field}: {audio}")
                 self.status.set("Воспроизведение WAV-кандидата" if field == "derived_path" else "Воспроизведение оригинала")
             except Exception as exc:
-                messagebox.showerror("Предпрослушивание", str(exc), parent=window)
+                self.dialogs.showerror("Предпрослушивание", str(exc), parent=window)
 
         def stop_selected_preview() -> None:
             try:
@@ -1608,7 +1627,7 @@ class LibraryManagerApp:
                 winsound.PlaySound(None, 0)
                 self.status.set("Воспроизведение остановлено")
             except Exception as exc:
-                messagebox.showerror("Предпрослушивание", str(exc), parent=window)
+                self.dialogs.showerror("Предпрослушивание", str(exc), parent=window)
 
         def review_selected() -> None:
             selected_path = selected_manifest()
@@ -1626,6 +1645,14 @@ class LibraryManagerApp:
         tree.bind("<Double-1>", lambda _event: play_selected("derived_path"))
         if not rows:
             self._write("Очередь ручной проверки пуста: staging/manifests не содержит JSON-манифестов.")
+        ttk.Label(
+            window_footer,
+            text=f"STAGING MANIFESTS  /  {len(rows)} RECORDS  /  REVIEW IS MANUAL",
+        ).pack(side="left")
+        ttk.Button(
+            window_footer, text="ЗАКРЫТЬ",
+            style="PPGU.DialogSecondary.TButton", command=window.destroy,
+        ).pack(side="right")
 
     def review_candidate(self, selected_path: str | None = None) -> None:
         """Collect explicit musical and license decisions for one staged WAV."""
@@ -1639,7 +1666,7 @@ class LibraryManagerApp:
         from factory_curator import INSTRUMENTS, ROLES, STYLES, TONES
 
         def ask_value(title: str, prompt: str, values: set[str]) -> str | None:
-            return simpledialog.askstring(
+            return self.dialogs.askstring(
                 title, prompt + "\n\nДопустимые значения:\n" + ", ".join(sorted(values)),
                 parent=self.root,
             )
@@ -1656,21 +1683,21 @@ class LibraryManagerApp:
         tone = ask_value("Характер звучания", "Укажите подтверждённый тип звучания:", TONES)
         if tone is None:
             return
-        notes = simpledialog.askstring(
+        notes = self.dialogs.askstring(
             "Музыкальная проверка",
             "Что прослушано и проверено? Укажите границы, характер партии и возможные ограничения:",
             parent=self.root,
         )
         if notes is None:
             return
-        evidence = simpledialog.askstring(
+        evidence = self.dialogs.askstring(
             "Лицензионное основание",
             "Укажите лицензию/источник и основание, разрешающее включение производного WAV в распространяемую FACTORY-библиотеку:",
             parent=self.root,
         )
         if evidence is None:
             return
-        mode_text = simpledialog.askstring(
+        mode_text = self.dialogs.askstring(
             "Категории назначения библиотеки для VST3",
             "Укажите только подтверждённые категории подготовленной библиотеки через запятую. "
             "Это не режимы Manager; музыкальные режимы плагина — MELODY и PATTERN. "
@@ -1683,21 +1710,21 @@ class LibraryManagerApp:
         selected_modes = [item.strip().upper() for item in mode_text.split(",") if item.strip()]
         invalid_modes = [item for item in selected_modes if item not in MODE_ORDER]
         if invalid_modes:
-            messagebox.showerror(
+            self.dialogs.showerror(
                 "Категории библиотеки VST3",
                 "Неизвестные разделы: " + ", ".join(invalid_modes)
                 + "\nДопустимые значения: " + ", ".join(MODE_ORDER),
                 parent=self.root,
             )
             return
-        if not messagebox.askyesno(
+        if not self.dialogs.askyesno(
             "Подтверждение REVIEWED",
             "Подтверждаете, что лично прослушали WAV, проверили музыкальное содержимое и границы, "
             "а также корректность выбранных категорий назначения для библиотеки VST3?",
             parent=self.root,
         ):
             return
-        mapping_text = simpledialog.askstring(
+        mapping_text = self.dialogs.askstring(
             "Подтверждённая музыкальная привязка",
             "Введите только подтверждённые данные из прослушивания: "
             "MIDI:60, CHORD:C или NOTES:60,62,64. "
@@ -1730,14 +1757,14 @@ class LibraryManagerApp:
             elif token:
                 raise ValueError
         except ValueError:
-            messagebox.showerror(
+            self.dialogs.showerror(
                 "Музыкальная привязка",
                 "Формат: MIDI:60, CHORD:C или NOTES:60,62,64. "
                 "MIDI-ноты должны быть в диапазоне 0–127.",
                 parent=self.root,
             )
             return
-        technique_text = simpledialog.askstring(
+        technique_text = self.dialogs.askstring(
             "Подтверждённые техники",
             "Введите только прослушанные и подтверждённые техники через запятую.\n"
             + ", ".join(TECHNIQUES) + "\nОставьте пустым, если техника не подтверждена.",
@@ -1749,7 +1776,7 @@ class LibraryManagerApp:
             item.strip().upper().replace(" ", "_").replace("-", "_")
             for item in technique_text.split(",") if item.strip()
         ]
-        velocity_layer = simpledialog.askstring(
+        velocity_layer = self.dialogs.askstring(
             "Velocity layer",
             "Подтверждённый слой: LOW, MEDIUM, HIGH или UNKNOWN.",
             initialvalue="UNKNOWN", parent=self.root,
@@ -1757,7 +1784,7 @@ class LibraryManagerApp:
         if velocity_layer is None:
             return
         velocity_layer = velocity_layer.strip().upper()
-        advanced_text = simpledialog.askstring(
+        advanced_text = self.dialogs.askstring(
             "Структура Pattern / Melody",
             "Необязательно: вставьте JSON с подтверждёнными событиями Pattern/Melody. "
             "Если данных нет — оставьте {}.\n"
@@ -1776,10 +1803,10 @@ class LibraryManagerApp:
             if not isinstance(advanced_metadata, dict):
                 raise ValueError("Нужен JSON-объект.")
         except (json.JSONDecodeError, ValueError) as exc:
-            messagebox.showerror("Структура Pattern / Melody", f"Некорректный JSON: {exc}", parent=self.root)
+            self.dialogs.showerror("Структура Pattern / Melody", f"Некорректный JSON: {exc}", parent=self.root)
             return
 
-        if not messagebox.askyesno(
+        if not self.dialogs.askyesno(
             "Подтверждение LICENSE_APPROVED",
             "Подтверждаете, что указанное лицензионное основание действительно разрешает распространение этого материала?",
             parent=self.root,
@@ -1812,7 +1839,7 @@ class LibraryManagerApp:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
         def progress(message: str) -> None:
             self._queue_progress(message)
@@ -1830,14 +1857,14 @@ class LibraryManagerApp:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
         manifests_dir = STAGING_ROOT / "manifests"
         manifest_count = len(list(manifests_dir.glob("*.json"))) if manifests_dir.is_dir() else 0
         if manifest_count == 0:
-            messagebox.showinfo("FACTORY", "В staging пока нет манифестов для распределения.")
+            self.dialogs.showinfo("FACTORY", "В staging пока нет манифестов для распределения.")
             return
-        if not messagebox.askyesno(
+        if not self.dialogs.askyesno(
             "Автоматическое распределение FACTORY",
             f"Менеджер автоматически проверит все {manifest_count} манифестов.\n"
             "Будут скопированы только кандидаты с подтверждённой музыкальной проверкой, "
@@ -1863,7 +1890,7 @@ class LibraryManagerApp:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
         report_path = MANAGER_DIR / "reports" / ("cleanup_audit_" + __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S") + ".json")
         self._background("Полный аудит Import", lambda: audit_all_import_sources(
@@ -1873,7 +1900,7 @@ class LibraryManagerApp:
         try:
             samples = self._samples()
         except Exception as exc:
-            messagebox.showerror("Папка Samples", str(exc))
+            self.dialogs.showerror("Папка Samples", str(exc))
             return
         audit_path = filedialog.askopenfilename(
             title="Выберите полный cleanup_audit_*.json",
@@ -1886,22 +1913,22 @@ class LibraryManagerApp:
             audit = json.loads(Path(audit_path).read_text(encoding="utf-8"))
             summary = audit["summary"]
             if summary.get("blocked_sources") or summary.get("errors") or summary.get("eligible_for_cleanup") != summary.get("source_files_scanned"):
-                messagebox.showwarning(
+                self.dialogs.showwarning(
                     "Очистка заблокирована",
                     "Не все исходники имеют полностью проверенные производные копии. "
                     "Сначала устраните блокировки в отчёте. Ни один файл не удалён."
                 )
                 return
         except Exception as exc:
-            messagebox.showerror("Отчёт очистки", str(exc))
+            self.dialogs.showerror("Отчёт очистки", str(exc))
             return
-        if not messagebox.askyesno(
+        if not self.dialogs.askyesno(
             "Удаление оригиналов — подтверждение 1/2",
             f"Аудит охватил все {summary['source_files_scanned']} исходных файлов. "
             "Все зависимости имеют проверенные копии. Удалить оригиналы из Import?"
         ):
             return
-        if not messagebox.askyesno(
+        if not self.dialogs.askyesno(
             "Удаление оригиналов — подтверждение 2/2",
             "Подтверждаете окончательное удаление всех исходников? "
             "Перед удалением аудит и SHA-256 будут проверены повторно."
@@ -1918,13 +1945,13 @@ class LibraryManagerApp:
             "PORTABLE_USER_GUIDE_RU.md", module_file=__file__, bundle_dir=BUNDLE_DIR
         )
         if not guide.is_file():
-            messagebox.showinfo("Инструкция", "Файл PORTABLE_USER_GUIDE_RU.md не найден рядом с приложением.")
+            self.dialogs.showinfo("Инструкция", "Файл PORTABLE_USER_GUIDE_RU.md не найден рядом с приложением.")
             return
         try:
             import os
             os.startfile(str(guide))
         except Exception as exc:
-            messagebox.showerror("Инструкция", str(exc))
+            self.dialogs.showerror("Инструкция", str(exc))
 
     def open_reports(self) -> None:
         path = MANAGER_DIR / "reports"
