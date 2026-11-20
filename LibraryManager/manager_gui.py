@@ -423,6 +423,7 @@ class LibraryManagerApp:
             "Run the full library pass: inventory, hashes, SFZ checks, audio analysis, candidate "
             "extraction, PATTERN / MELODY preparation and review-gated routing.",
             "SCAN  /  AUDIO ANALYSIS  /  CANDIDATES  /  REVIEW QUEUE  /  FACTORY + OTHER",
+            "START SCAN HUNTING",
             self.scan_hunting,
             "PPGU.Scan.TButton",
             accent_magenta,
