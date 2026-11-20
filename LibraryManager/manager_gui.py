@@ -38,6 +38,7 @@ from library_operations import (
 )
 from ppgu_theme import NEON_STAGE_THEME, resource_path, configure_neon_stage_ttk
 from neon_stage_dialogs import NeonStageDialogs
+from manager_ui_feedback import build_import_completion_summary
 
 APP_VERSION = "3.0.0"
 BUNDLE_DIR, MANAGER_DIR, PORTABLE_MODE = resolve_runtime_paths(__file__)
@@ -56,9 +57,12 @@ class LibraryManagerApp:
         self.root.geometry("980x680")
         self.root.minsize(760, 520)
         self._settings_path = MANAGER_DIR / "manager_settings.json"
-        self.samples_root = tk.StringVar(value=self._load_saved_samples_root())
-        self.analyze_audio = tk.BooleanVar(value=True)
-        self.guitar_confirmed = tk.BooleanVar(value=False)
+        self._saved_settings = self._load_saved_settings()
+        self.samples_root = tk.StringVar(value=self._saved_settings.get("samples_root", DEFAULT_SAMPLES))
+        self.analyze_audio = tk.BooleanVar(value=self._saved_settings.get("analyze_audio", True))
+        self.guitar_confirmed = tk.BooleanVar(
+            value=self._saved_settings.get("guitar_source_confirmed", False)
+        )
         self.status = tk.StringVar(value="Готов. Выберите Samples или непосредственно Import Sample Guitar.")
         # Worker threads must never call Tkinter methods. They only enqueue events;
         # the Tk main thread drains this queue in _poll_worker_events().
@@ -87,6 +91,74 @@ class LibraryManagerApp:
                 "PORTABLE: приложение можно хранить в любой доступной папке. "
                 f"Пользовательские данные: {MANAGER_DIR}"
             )
+
+    @staticmethod
+    def _draw_neon_stage_art(canvas: tk.Canvas, palette: dict[str, str]) -> None:
+        """Draw a vector guitar-stage motif instead of relying on placeholder artwork."""
+        canvas.delete("all")
+        width, height = 350, 126
+        bg = palette["control_bg"]
+        panel = palette["panel_elevated"]
+        border = palette["control_border"]
+        cyan = palette["accent_glow"]
+        blue = palette["accent"]
+        purple = palette["accent_purple"]
+        magenta = palette["accent_magenta"]
+        muted = palette["text_disabled"]
+
+        canvas.create_rectangle(0, 0, width, height, fill=bg, outline=border, width=1)
+        for index in range(1, 8):
+            x = index * 48
+            canvas.create_line(x, 0, x - 38, height, fill=palette["lowlight"], width=2)
+        canvas.create_text(
+            14, 13, text="AUTO SOUND HUNTER  /  LIVE SIGNAL",
+            anchor="w", fill=cyan, font=("Consolas", 7, "bold"),
+        )
+        canvas.create_text(
+            width - 14, 13, text="NEON STAGE",
+            anchor="e", fill=magenta, font=("Segoe UI", 7, "bold"),
+        )
+
+        # Electric-guitar silhouette: body, neck, frets, pickups and six strings.
+        canvas.create_polygon(
+            134, 70, 145, 54, 163, 54, 174, 67, 190, 72, 194, 88,
+            184, 105, 164, 116, 143, 109, 129, 94,
+            fill=panel, outline=magenta, width=2, smooth=True,
+        )
+        canvas.create_polygon(
+            164, 68, 312, 20, 329, 31, 184, 85,
+            fill=palette["control_face"], outline=cyan, width=1,
+        )
+        for fret in range(1, 8):
+            t = fret / 8
+            x1, y1 = 164 + 148 * t, 68 - 48 * t
+            x2, y2 = 184 + 145 * t, 85 - 54 * t
+            canvas.create_line(x1, y1, x2, y2, fill=border, width=1)
+        for string_index in range(6):
+            offset = string_index * 2.25
+            canvas.create_line(
+                169, 71 + offset, 322, 23 + offset,
+                fill=cyan if string_index in (0, 5) else muted, width=1,
+            )
+        canvas.create_rectangle(165, 78, 181, 85, fill=blue, outline=cyan, width=1)
+        canvas.create_rectangle(146, 82, 160, 91, fill=palette["lcd_bg"], outline=purple, width=1)
+        canvas.create_oval(169, 95, 176, 102, fill=magenta, outline=cyan, width=1)
+        canvas.create_text(157, 94, text="P", fill=palette["text_primary"], font=("Segoe UI", 8, "bold"))
+
+        levels = (10, 18, 28, 15, 36, 22, 13, 31, 19, 11)
+        for index, level in enumerate(levels):
+            x = 17 + index * 11
+            color = cyan if index % 3 else purple
+            canvas.create_rectangle(x, 97 - level, x + 5, 97, fill=color, outline=color)
+        canvas.create_line(14, 101, 127, 101, fill=border, width=1)
+        canvas.create_text(14, 116, text="INPUT", anchor="w", fill=muted, font=("Consolas", 6))
+        for index, color in enumerate((blue, cyan, purple, magenta)):
+            x = width - 86 + index * 19
+            canvas.create_oval(x, 103, x + 7, 110, fill=color, outline=color)
+        canvas.create_text(
+            width - 14, 116, text="SIGNAL READY",
+            anchor="e", fill=cyan, font=("Consolas", 6, "bold"),
+        )
 
     def _build(self) -> None:
         """Build the two-action NEON STAGE dashboard for import and full hunting."""
@@ -139,6 +211,28 @@ class LibraryManagerApp:
             background=[("disabled", control_face), ("pressed", accent_glow), ("active", accent_glow)],
             foreground=[("disabled", disabled)],
             bordercolor=[("active", accent_glow)],
+        )
+        style.configure(
+            "PPGU.Import.TButton", background=accent, foreground="#FFFFFF",
+            bordercolor=accent, lightcolor=accent_glow, darkcolor=lowlight,
+            padding=(18, 13), font=("Segoe UI", 10, "bold"), relief="flat",
+        )
+        style.map(
+            "PPGU.Import.TButton",
+            background=[("disabled", control_face), ("pressed", accent_glow), ("active", palette["highlight"])],
+            foreground=[("disabled", disabled), ("pressed", "#FFFFFF"), ("active", "#FFFFFF")],
+            bordercolor=[("active", accent_glow), ("focus", accent_glow)],
+        )
+        style.configure(
+            "PPGU.Scan.TButton", background=accent_magenta, foreground="#FFFFFF",
+            bordercolor=accent_magenta, lightcolor=accent_magenta, darkcolor=accent_purple,
+            padding=(18, 13), font=("Segoe UI", 10, "bold"), relief="flat",
+        )
+        style.map(
+            "PPGU.Scan.TButton",
+            background=[("disabled", control_face), ("pressed", accent_purple), ("active", accent_purple)],
+            foreground=[("disabled", disabled), ("pressed", "#FFFFFF"), ("active", "#FFFFFF")],
+            bordercolor=[("active", accent_glow), ("focus", accent_glow)],
         )
         style.configure(
             "PPGU.Neon.Horizontal.TProgressbar",
@@ -237,10 +331,12 @@ class LibraryManagerApp:
         settings_menu.add_checkbutton(
             label="Полный аудиоанализ и извлечение кандидатов (рекомендуется)",
             variable=self.analyze_audio,
+            command=self._save_settings_from_ui,
         )
         settings_menu.add_checkbutton(
             label="Источник уже отфильтрован как гитарный",
             variable=self.guitar_confirmed,
+            command=self._save_settings_from_ui,
         )
         menu_bar.add_cascade(label="НАСТРОЙКИ", menu=settings_menu)
 
@@ -280,18 +376,12 @@ class LibraryManagerApp:
             bg=bg, fg=disabled, font=("Consolas", 8),
         ).pack(anchor="w", pady=(7, 0))
 
-        self._skin_hero = None
-        try:
-            hero = tk.PhotoImage(file=str(resource_path("assets", "hero.png")))
-            factor = max(1, (hero.width() + 179) // 180, (hero.height() + 89) // 90)
-            self._skin_hero = hero.subsample(factor, factor)
-            tk.Label(
-                header, image=self._skin_hero, bg=panel,
-                highlightbackground=border, highlightthickness=1,
-                padx=8, pady=6,
-            ).pack(side="right", padx=(18, 0))
-        except (tk.TclError, OSError):
-            self._skin_hero = None
+        self._stage_art = tk.Canvas(
+            header, width=350, height=126, bg=control_bg,
+            highlightbackground=border, highlightthickness=1, bd=0,
+        )
+        self._stage_art.pack(side="right", padx=(18, 0))
+        self._draw_neon_stage_art(self._stage_art, palette)
 
         version = tk.Frame(
             header, bg=panel_alt, highlightbackground=border,
@@ -353,14 +443,16 @@ class LibraryManagerApp:
                 "eyebrow": "SOURCE INTAKE  /  SELECTIVE ADD",
                 "title": "IMPORT SAMPLE GUITAR",
                 "description": (
-                    "Выберите отдельные WAV / SFZ / аудиофайлы или одну либо несколько "
-                    "готовых папок гитарных библиотек. Manager создаст проверенные SHA-256 "
-                    "копии внутри Import Sample Guitar. Исходные папки останутся нетронутыми."
+                    "Выберите WAV / SFZ / аудиофайлы, ZIP / 7Z / RAR или целые папки "
+                    "гитарных библиотек. Manager создаст SHA-256-проверенные копии в "
+                    "Import Sample Guitar. Оригиналы останутся на месте. Архивы сохраняются "
+                    "целиком и попадают в инвентаризацию без автоматической распаковки."
                 ),
                 "button": "IMPORT SAMPLE GUITAR",
                 "command": self.import_guitar,
                 "accent": accent,
-                "footer": "SELECT FILES / FOLDERS  •  COPY + VERIFY  •  KEEP ORIGINALS",
+                "style": "PPGU.Import.TButton",
+                "footer": "WAV / SFZ / ZIP / 7Z / RAR  •  SHA-256  •  ORIGINALS SAFE",
             },
             {
                 "number": "02",
@@ -375,15 +467,17 @@ class LibraryManagerApp:
                 "button": "START SCAN HUNTING",
                 "command": self.scan_hunting,
                 "accent": accent_magenta,
-                "footer": "FULL SCAN  •  AUDIO ANALYSIS  •  HUNT CANDIDATES",
+                "style": "PPGU.Scan.TButton",
+                "footer": "INVENTORY  •  AUDIO ANALYSIS  •  REVIEW-GATED OUTPUT",
             },
         ]
 
         self._action_buttons = []
         for column, item in enumerate(workflows):
             card = tk.Frame(
-                cards, bg=panel, highlightbackground=border,
-                highlightthickness=1, padx=18, pady=16,
+                cards, bg=panel, highlightbackground=item["accent"],
+                highlightcolor=accent_glow, highlightthickness=1, bd=0,
+                padx=18, pady=16,
             )
             card.grid(row=0, column=column, sticky="nsew", padx=(0, 7) if column == 0 else (7, 0), pady=5)
             tk.Frame(card, bg=item["accent"], height=4).pack(fill="x", pady=(0, 12))
@@ -401,14 +495,20 @@ class LibraryManagerApp:
                 card, text=item["title"], bg=panel, fg=text,
                 font=("Segoe UI", 16, "bold"), anchor="w",
             ).pack(fill="x", pady=(10, 8))
-            tk.Label(
+            description_label = tk.Label(
                 card, text=item["description"], bg=panel, fg=muted,
                 font=("Segoe UI", 9), justify="left", anchor="nw",
                 wraplength=470, height=5,
-            ).pack(fill="both", expand=True, pady=(0, 12))
+            )
+            description_label.pack(fill="both", expand=True, pady=(0, 12))
+            card.bind(
+                "<Configure>",
+                lambda event, label=description_label:
+                    label.configure(wraplength=max(260, event.width - 44)),
+            )
             button = ttk.Button(
                 card, text=item["button"], command=item["command"],
-                style="PPGU.Primary.TButton",
+                style=item["style"],
             )
             button.pack(fill="x", ipady=8)
             self._action_buttons.append(button)
@@ -550,16 +650,28 @@ class LibraryManagerApp:
         self.log.see("end")
         self.log.configure(state="disabled")
 
-    def _load_saved_samples_root(self) -> str:
-        """Restore the last selected library from this installation's data folder."""
+    def _load_saved_settings(self) -> dict:
+        """Restore the library path and safe UI preferences from the user-data folder."""
         try:
             settings = json.loads(self._settings_path.read_text(encoding="utf-8"))
+            if not isinstance(settings, dict):
+                return {}
             value = settings.get("samples_root", "")
-            if isinstance(value, str) and value.strip() and Path(value).expanduser().exists():
-                return value
+            samples_root = (
+                value if isinstance(value, str) and value.strip()
+                and Path(value).expanduser().is_dir() else DEFAULT_SAMPLES
+            )
+            analyze_audio = settings.get("analyze_audio", True)
+            guitar_confirmed = settings.get("guitar_source_confirmed", False)
+            return {
+                "samples_root": samples_root,
+                "analyze_audio": analyze_audio if type(analyze_audio) is bool else True,
+                "guitar_source_confirmed": (
+                    guitar_confirmed if type(guitar_confirmed) is bool else False
+                ),
+            }
         except (OSError, ValueError, TypeError, AttributeError):
-            pass
-        return DEFAULT_SAMPLES
+            return {}
 
     def _save_settings(self) -> None:
         """Persist the selected library atomically in UserData / LocalAppData."""
@@ -568,8 +680,10 @@ class LibraryManagerApp:
 
         self._settings_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "samples_root": self.samples_root.get().strip(),
+            "analyze_audio": bool(self.analyze_audio.get()),
+            "guitar_source_confirmed": bool(self.guitar_confirmed.get()),
             "app_version": APP_VERSION,
         }
         fd, temporary = tempfile.mkstemp(
@@ -589,6 +703,18 @@ class LibraryManagerApp:
             except OSError:
                 pass
             raise
+
+    def _save_settings_from_ui(self) -> None:
+        """Persist settings-menu changes without interrupting the current session."""
+        try:
+            self._save_settings()
+        except OSError as exc:
+            self._write(f"[ПРЕДУПРЕЖДЕНИЕ] Не удалось сохранить настройки: {exc}")
+            self.dialogs.showwarning(
+                "Настройки Manager",
+                f"Изменения применены в этой сессии, но не сохранены на диск.\n{exc}",
+                parent=self.root,
+            )
 
     def _prompt_for_library_root(self) -> None:
         selected = filedialog.askdirectory(
@@ -763,6 +889,30 @@ class LibraryManagerApp:
 
     def _finish(self, title: str, result) -> None:
         """Write a compact result card; full machine reports stay in report files."""
+        if "IMPORT GUITAR" in str(title).upper():
+            import_summary, import_detail = build_import_completion_summary(
+                result if isinstance(result, dict) else {}
+            )
+            self._write("[ИТОГ IMPORT GUITAR] " + json.dumps(
+                import_summary, ensure_ascii=False, default=str, separators=(",", ":")
+            ))
+            self._write(import_detail)
+            self._progress_title.set("IMPORT COMPLETE  /  ИМПОРТ ЗАВЕРШЁН")
+            self._progress_detail.set(
+                f"Копий SHA-256: {import_summary['copied_files']}  •  "
+                f"зарегистрировано: {import_summary['registered_files']}  •  "
+                f"уже было: {import_summary['already_registered']}  •  "
+                f"архивов в инвентаризации: {import_summary['archives']}  •  "
+                f"ошибок: {import_summary['errors']}"
+            )
+            warning = bool(
+                import_summary["errors"] or import_summary["sfz_dependencies_blocked"]
+            )
+            self.status.set(
+                title + (": завершено с предупреждениями" if warning else ": завершено")
+            )
+            return
+
         def select_fields(value, fields):
             if not isinstance(value, dict):
                 return value
@@ -786,6 +936,10 @@ class LibraryManagerApp:
                  "melody_mode_single_note_bindings", "melody_mode_phrase_wav_count",
                  "total_new_wav_candidates", "manifest_count_in_staging", "review_status",
                  "license_status"),
+            )
+            extraction = result.get("physical_extraction") or {}
+            summary["physical_extraction_failures"] = len(
+                extraction.get("failures", []) if isinstance(extraction, dict) else []
             )
             summary["factory_distribution"] = select_fields(
                 result.get("factory_distribution"),
@@ -821,7 +975,22 @@ class LibraryManagerApp:
         factory = result.get("factory_distribution", {}) if isinstance(result, dict) else {}
         other = result.get("other_routing", {}) if isinstance(result, dict) else {}
         candidates = result.get("physical_extraction", {}) if isinstance(result, dict) else {}
-        self._progress_title.set("COMPLETE  /  ЗАВЕРШЕНО")
+        extraction_failures = (
+            len(candidates.get("failures", [])) if isinstance(candidates, dict) else 0
+        )
+        analysis = result.get("deep_analysis", {}) if isinstance(result, dict) else {}
+        analysis_errors = analysis.get("errors", 0) if isinstance(analysis, dict) else 0
+        if isinstance(analysis_errors, list):
+            analysis_errors = len(analysis_errors)
+        try:
+            analysis_errors = int(analysis_errors or 0)
+        except (TypeError, ValueError):
+            analysis_errors = 1
+        warning_count = extraction_failures + analysis_errors + int(other.get("error_count", 0) or 0)
+        self._progress_title.set(
+            "COMPLETE WITH WARNINGS  /  ЗАВЕРШЕНО С ПРЕДУПРЕЖДЕНИЯМИ"
+            if warning_count else "COMPLETE  /  ЗАВЕРШЕНО"
+        )
         self._progress_bar.stop()
         self._progress_bar.configure(mode="determinate", value=100)
         self._progress_detail.set(
@@ -829,9 +998,12 @@ class LibraryManagerApp:
             f"FACTORY: {factory.get('copied_count', 0)} новых / "
             f"{factory.get('already_present_count', 0)} уже проверено  •  "
             f"OTHER: {other.get('copied_count', 0)} копий / "
-            f"{other.get('error_count', 0)} ошибок"
+            f"{other.get('error_count', 0)} ошибок  •  "
+            f"сбоев извлечения: {extraction_failures}  •  ошибок анализа: {analysis_errors}"
         )
-        self.status.set(title + ": завершено")
+        self.status.set(
+            title + (": завершено с предупреждениями" if warning_count else ": завершено")
+        )
 
     def _error(self, title: str, exc: Exception, details: str) -> None:
         self._write(details)
@@ -919,7 +1091,9 @@ class LibraryManagerApp:
             f"Менеджер создаст проверенные копии выбранных файлов в:\n{incoming}\n\n"
             "Оригиналы останутся на прежнем месте и не будут изменены, перемещены или удалены. "
             "Для копирования требуется дополнительное место на диске. "
-            "После импорта копии будут доступны этапам SCAN LIBRARY и START HUNTING. Продолжить?",
+            "После импорта копии будут доступны SCAN HUNTING. Архивы сохраняются целиком и "
+            "учитываются как архивы; Manager не распаковывает ZIP / 7Z / RAR автоматически. "
+            "Продолжить?",
             parent=self.root,
         ):
             self.status.set("IMPORT GUITAR: копирование отменено.")
@@ -1026,6 +1200,10 @@ class LibraryManagerApp:
             )
             if guitar_confirmed:
                 self.guitar_confirmed.set(True)
+                try:
+                    self._save_settings()
+                except OSError as exc:
+                    self._write(f"[ПРЕДУПРЕЖДЕНИЕ] Не удалось сохранить подтверждение источника: {exc}")
 
         def work():
             def report_progress(message: str) -> None:
