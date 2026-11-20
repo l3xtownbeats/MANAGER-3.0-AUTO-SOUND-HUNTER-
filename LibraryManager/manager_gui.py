@@ -421,8 +421,8 @@ class LibraryManagerApp:
             telemetry.grid_columnconfigure(column, weight=1, uniform="telemetry")
 
         engine_panel = tk.Frame(
-            telemetry, bg=panel_alt, highlightbackground=border,
-            highlightthickness=1, padx=12, pady=10,
+            telemetry, bg=panel_alt, highlightbackground=palette["highlight"],
+            highlightthickness=1, bd=1, relief="ridge", padx=12, pady=10,
         )
         engine_panel.grid(row=0, column=0, sticky="nsew", padx=4)
         tk.Label(
