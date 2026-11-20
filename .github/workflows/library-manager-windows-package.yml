@@ -80,6 +80,10 @@ jobs:
             Start-Sleep -Seconds 5
             $p.Refresh()
             if ($p.HasExited) { throw "Portable-mode app startup failed (code $($p.ExitCode))." }
+            if ($p.MainWindowHandle -eq [IntPtr]::Zero) { throw "Portable-mode app did not create its main window." }
+            if ($p.MainWindowTitle -notmatch "NEON STAGE DEFAULT") {
+              throw "Unexpected portable-mode window title: $($p.MainWindowTitle)"
+            }
             Stop-Process -Id $p.Id -Force
             Wait-Process -Id $p.Id -ErrorAction SilentlyContinue
           } finally {
@@ -171,6 +175,10 @@ jobs:
             Start-Sleep -Seconds 5
             $p.Refresh()
             if ($p.HasExited) { throw "Installed app startup failed (code $($p.ExitCode))." }
+            if ($p.MainWindowHandle -eq [IntPtr]::Zero) { throw "Installed app did not create its main window." }
+            if ($p.MainWindowTitle -notmatch "NEON STAGE DEFAULT") {
+              throw "Unexpected installed-mode window title: $($p.MainWindowTitle)"
+            }
             Stop-Process -Id $p.Id -Force
             Wait-Process -Id $p.Id -ErrorAction SilentlyContinue
           } finally {
