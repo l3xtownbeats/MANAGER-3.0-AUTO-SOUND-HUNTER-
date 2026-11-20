@@ -57,7 +57,7 @@ def write_pcm_wav_range(
 ) -> dict[str, Any]:
     """Write an exact source frame range as a new 24-bit PCM WAV.
 
-    Decodes at most 65,536 frames at a time. The destination is created
+    Decodes at most 131,072 frames at a time. The destination is created
     exclusively and partial output is removed on failure.
     """
     import soundfile as sf
@@ -84,7 +84,7 @@ def write_pcm_wav_range(
                 format="WAV", subtype="PCM_24",
             ) as writer:
                 while remaining:
-                    count = min(65536, remaining)
+                    count = min(131072, remaining)
                     data = reader.read(count, dtype="float32", always_2d=True)
                     if len(data) != count:
                         raise IOError("Decoder returned an incomplete frame range")
