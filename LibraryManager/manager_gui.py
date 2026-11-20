@@ -380,80 +380,77 @@ class LibraryManagerApp:
                 anchor="w", fill=amber, font=("Segoe UI", 8),
             )
 
-        action_row = tk.Frame(center, bg=bg)
-        action_row.pack(fill="x", pady=(0, 7))
-        action_row.grid_columnconfigure(0, weight=1)
-        action_row.grid_columnconfigure(1, weight=1)
-
-        import_panel = VstPanel(
-            action_row, "01  /  IMPORT SAMPLE GUITAR",
-            tag="COPY  +  VERIFY", accent=cyan,
+        # SIX PRIMARY WORKFLOWS — the exact approved Manager navigation surface.
+        # Each control invokes an existing, real operation; no decorative/fake actions.
+        actions_panel = VstPanel(
+            center, "NEON STAGE  /  MAIN CONTROL",
+            tag="SIX CORE WORKFLOWS  •  LIVE ACTIONS", accent=cyan,
         )
-        import_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
-        tk.Label(
-            import_panel.body,
-            text="ADD ONE OR MULTIPLE GUITAR LIBRARIES",
-            bg=inset, fg=text, font=("Segoe UI", 9, "bold"),
-        ).pack(anchor="w", pady=(1, 4))
-        tk.Label(
-            import_panel.body,
-            text="Select WAV / audio / SFZ files or whole folders. "
-                 "Manager makes SHA-256-verified copies and preserves every original.",
-            bg=inset, fg=muted, font=("Segoe UI", 8),
-            justify="left", anchor="w", wraplength=440,
-        ).pack(fill="x", anchor="w", pady=(0, 5))
-        self._import_button = NeonActionButton(
-            import_panel.body, "IMPORT SAMPLE GUITAR",
-            self.import_guitar,
-            subtitle="WAV  /  SFZ  /  LIBRARY FOLDERS  /  ARCHIVES",
-            icon="folder", accent=cyan, variant="primary",
-            width=420, height=74,
-        )
-        self._import_button.pack(fill="x", pady=(3, 5))
+        actions_panel.pack(fill="x", pady=(0, 7))
+        action_grid = tk.Frame(actions_panel.body, bg=inset)
+        action_grid.pack(fill="x")
+        action_grid.grid_columnconfigure(0, weight=1, uniform="main-actions")
+        action_grid.grid_columnconfigure(1, weight=1, uniform="main-actions")
 
-        scan_panel = VstPanel(
-            action_row, "02  /  START SCAN HUNTING",
-            tag="FULL ANALYSIS", accent=magenta,
+        primary_actions = (
+            ("01", "IMPORT GUITAR", "COPY SOURCE  /  SHA-256 VERIFY",
+             self.import_guitar, "folder", cyan, "primary"),
+            ("02", "SCAN LIBRARY", "FAST INVENTORY  /  FILESYSTEM",
+             self.quick_scan_only, "scan", blue, "secondary"),
+            ("03", "START HUNTING", "FULL SCAN  /  AUDIO  /  CANDIDATES",
+             self.scan_hunting, "scan", magenta, "magenta"),
+            ("04", "REVIEW QUEUE", "HUMAN REVIEW  /  PENDING CANDIDATES",
+             self.open_review_queue, "queue", amber, "secondary"),
+            ("05", "BUILD LIBRARY", "DISTRIBUTE ONLY ELIGIBLE APPROVED ASSETS",
+             self.distribute, "reports", green, "secondary"),
+            ("06", "VERIFY / RECOVERY", "AUDIT STAGING  /  FACTORY INTEGRITY",
+             self.finalize_library, "reports", purple, "secondary"),
         )
-        scan_panel.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
-        tk.Label(
-            scan_panel.body,
-            text="FULL LIBRARY DISCOVERY AND PREPARATION",
-            bg=inset, fg=text, font=("Segoe UI", 9, "bold"),
-        ).pack(anchor="w", pady=(1, 4))
-        tk.Label(
-            scan_panel.body,
-            text="Inventory, SHA-256, SFZ dependency checks, audio analysis, "
-                 "PATTERN / MELODY candidate preparation and review-gated routing.",
-            bg=inset, fg=muted, font=("Segoe UI", 8),
-            justify="left", anchor="w", wraplength=440,
-        ).pack(fill="x", anchor="w", pady=(0, 5))
-        self._scan_button = NeonActionButton(
-            scan_panel.body, "START SCAN HUNTING",
-            self.scan_hunting,
-            subtitle="INVENTORY  /  AUDIO  /  CANDIDATES  /  REVIEW",
-            icon="scan", accent=magenta, variant="magenta",
-            width=420, height=74,
-        )
-        self._scan_button.pack(fill="x", pady=(3, 5))
+        self._action_buttons = []
+        for index, (number, title, subtitle, command, icon, accent, variant) in enumerate(primary_actions):
+            card = tk.Frame(
+                action_grid, bg="#06152B",
+                highlightbackground="#24517D", highlightthickness=1,
+                bd=0, padx=7, pady=6,
+            )
+            card.grid(
+                row=index // 2, column=index % 2, sticky="nsew",
+                padx=(0, 4) if index % 2 == 0 else (4, 0),
+                pady=4,
+            )
+            rail = tk.Frame(card, bg="#06152B")
+            rail.pack(fill="x", pady=(0, 3))
+            tk.Label(
+                rail, text=number, bg="#06152B", fg=accent,
+                font=("Consolas", 8, "bold"),
+            ).pack(side="left")
+            tk.Label(
+                rail, text=title, bg="#06152B", fg=text,
+                font=("Segoe UI", 8, "bold"),
+            ).pack(side="left", padx=(8, 0))
+            button = NeonActionButton(
+                card, title, command,
+                subtitle=subtitle, icon=icon, accent=accent,
+                variant=variant, width=390, height=65,
+            )
+            button.pack(fill="x")
+            self._action_buttons.append(button)
 
-        self._action_buttons = [self._import_button, self._scan_button]
-
+        # PROCESS MAP — informational only; live completion is reported by the task monitor.
         pipeline_panel = VstPanel(
-            center, "SCAN HUNTING  /  PROCESS CHAIN",
-            tag="RUNS WHEN SCAN IS STARTED", accent=purple,
+            center, "SIGNAL PATH  /  LIBRARY BUILD PIPELINE",
+            tag="REAL TASK EVENTS ONLY", accent=purple,
         )
         pipeline_panel.pack(fill="both", expand=True)
         pipeline = tk.Frame(pipeline_panel.body, bg=inset)
         pipeline.pack(fill="both", expand=True)
         stages = (
-            ("01", "INVENTORY", "Folders + files", cyan),
-            ("02", "SHA-256", "Integrity map", blue),
-            ("03", "SFZ AUDIT", "Samples + includes", purple),
-            ("04", "AUDIO ANALYSIS", "Guitar candidates", cyan),
-            ("05", "PATTERN / MELODY", "Structure extraction", magenta),
-            ("06", "REVIEW QUEUE", "Human acceptance", amber),
-            ("07", "FACTORY / OTHER", "Gated distribution", green),
+            ("01", "IMPORT", "Verified copy", cyan),
+            ("02", "SCAN", "File inventory", blue),
+            ("03", "HUNT", "Audio + SFZ", purple),
+            ("04", "EXTRACT", "Candidates", magenta),
+            ("05", "REVIEW", "Human gate", amber),
+            ("06", "BUILD", "Approved only", green),
         )
         for index, (number, title, caption, color) in enumerate(stages):
             cell = tk.Frame(
@@ -478,7 +475,7 @@ class LibraryManagerApp:
             ).pack(anchor="w")
         tk.Label(
             pipeline_panel.body,
-            text="STAGE MARKERS ARE A PROCESS MAP — COMPLETION IS SHOWN ONLY BY THE LIVE TASK MONITOR.",
+            text="PIPELINE MAP ONLY — NO STAGE IS MARKED COMPLETE UNTIL A REAL TASK REPORTS IT.",
             bg=inset, fg=dim, font=("Consolas", 6, "bold"),
         ).pack(anchor="w", pady=(5, 0))
 
