@@ -62,41 +62,35 @@ class NeonStageDialogs:
         )
         shell.pack(fill="both", expand=True, padx=8, pady=8)
 
-        rail = tk.Frame(shell, bg=p["window_bg"], height=4)
-        rail.pack(fill="x")
-        rail.pack_propagate(False)
-        for color in (
-            p["accent"], p["accent_glow"], p.get("accent_purple", p["accent"]),
-            p.get("accent_magenta", p["accent"]),
-        ):
-            tk.Frame(rail, bg=color, height=4).pack(side="left", fill="both", expand=True)
+        accent_rule = tk.Frame(shell, bg=p["accent"], height=2)
+        accent_rule.pack(fill="x")
 
         header = tk.Frame(
-            shell, bg=p["panel_elevated"], padx=15, pady=10,
+            shell, bg=p["panel_elevated"], padx=14, pady=9,
             highlightbackground=p["control_border"], highlightthickness=1,
         )
         header.pack(fill="x", padx=8, pady=(8, 0))
         title_block = tk.Frame(header, bg=p["panel_elevated"])
         title_block.pack(side="left", fill="x", expand=True)
         tk.Label(
-            title_block, text="NEON STAGE  /  MANAGER WORKSPACE",
+            title_block, text="POP PUNK GUITAR  /  LIBRARY MANAGER",
             bg=p["panel_elevated"], fg=p["accent_glow"],
             font=("Segoe UI", 7, "bold"), anchor="w",
         ).pack(anchor="w")
         tk.Label(
             title_block, text=title, bg=p["panel_elevated"],
-            fg=p["text_primary"], font=("Segoe UI", 13, "bold"), anchor="w",
+            fg=p["text_primary"], font=("Segoe UI", 12, "bold"), anchor="w",
         ).pack(anchor="w", pady=(2, 0))
         tk.Label(
-            title_block, text=subtitle, bg=p["panel_elevated"],
-            fg=p["text_secondary"], font=("Segoe UI", 8), anchor="w",
+            title_block, text=subtitle,
+            bg=p["panel_elevated"], fg=p["text_secondary"],
+            font=("Segoe UI", 8), anchor="w",
         ).pack(anchor="w", pady=(2, 0))
-        led = tk.Canvas(
-            header, width=18, height=18, bg=p["panel_elevated"],
-            highlightthickness=0, bd=0,
-        )
-        led.create_oval(4, 4, 14, 14, fill=p["led_on"], outline=p["accent_glow"], width=1)
-        led.pack(side="right", padx=(10, 0), anchor="center")
+        tk.Label(
+            header, text="NEON STAGE  /  SKIN-1",
+            bg=p["panel_elevated"], fg=p["text_disabled"],
+            font=("Consolas", 7, "bold"), anchor="e",
+        ).pack(side="right", padx=(12, 0), anchor="center")
 
         content = tk.Frame(shell, bg=p["panel"])
         content.pack(fill="both", expand=True, padx=8, pady=8)
