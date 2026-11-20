@@ -805,6 +805,13 @@ class LibraryManagerApp:
                 result.get("performance_manifest"),
                 ("asset_binding_count", "event_count", "runtime_status"),
             )
+            structure = result.get("library_structure") or {}
+            summary["library_structure"] = select_fields(
+                structure.get("summary"),
+                ("unique_asset_count", "mode_assignment_count",
+                 "runtime_ready_assignment_count", "pattern_structure_verified_count",
+                 "melody_structure_verified_count"),
+            )
             summary["source_files_modified"] = result.get("source_files_modified", False)
             summary["source_files_moved_or_deleted"] = result.get("source_files_moved_or_deleted", False)
 
@@ -1260,7 +1267,7 @@ class LibraryManagerApp:
             chromatic_path = Path(analysis_result["report_directory"]) / "chromatic_pitch_map.json"
             chromatic_map = build_chromatic_pitch_map(json.loads(catalog_path.read_text(encoding="utf-8")))
             chromatic_path.write_text(
-                json.dumps(chromatic_map, ensure_ascii=False, indent=2) + "\\n",
+                json.dumps(chromatic_map, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
             performance_path = Path(analysis_result["report_directory"]) / "performance_manifest.json"
