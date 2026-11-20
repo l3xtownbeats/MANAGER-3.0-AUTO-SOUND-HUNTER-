@@ -1120,3 +1120,15 @@ PPGU использует собственный визуальный язык �
 - В workflow регрессионных тестов runner переключён с Windows на Ubuntu Latest: этот набор проверяет Python-логику, парсинг, каталоги, WAV и FakeStyle, а не нативную установку Windows. Это снижает зависимость unit tests от доступности Windows runner pool.
 - Windows Package workflow оставлен на Windows Latest, поскольку PyInstaller onedir, Inno Setup, Portable/Installer startup smoke tests являются Windows-специфичными.
 - Это изменение workflow-конфигурации, а не подтверждение успешного CI. Требуется дождаться новых run results.
+
+
+## Запись TJ-2026-11-20-MANAGER-WINDOWS-PATH-FIX-038 — нормализация Win32 short/long path в Portable regression tests
+
+- Дата: 2026-11-20
+- Тип: ФАКТИЧЕСКАЯ ЗАПИСЬ О WINDOWS CI FIX
+- Windows Package run #12 выполнил установку зависимостей и запустил 239 тестов, но выявил два оставшихся path-related assertion failures в Portable runtime tests.
+- Причина уточнена по фактическому Windows traceback: Win32 возвращает эквивалентные пути с short-name сегментом RUNNER~1 и long-name runneradmin; кроме того, тестовый writable_probe сравнивал Path до/после resolve как строково-разные значения и не включал fallback-сценарий.
+- Исправлено только в тестах: сравнение bundle path выполняется через Path.resolve(); writable_probe сравнивает resolve обеих сторон. Runtime production logic не менялась.
+- Commit: b31edac43d21491a2b12840257351d12e90adb70.
+- Linux regression run на этом commit завершился SUCCESS. Повторный Windows Package run на том же exact commit должен подтвердить полный Windows regression suite, Portable ZIP startup/contents и Installer smoke test.
+- До успешного Windows Package acceptance финальный 3.0.0 и релизный артефакт не объявлять.
