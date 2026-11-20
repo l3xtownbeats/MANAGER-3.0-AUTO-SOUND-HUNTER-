@@ -1,4 +1,5 @@
 import math, tempfile, unittest, wave
+from unittest.mock import patch
 from pathlib import Path
 from audio_analysis import analyse_wav, read_mono_pcm
 
@@ -20,6 +21,15 @@ class AudioAnalysisTests(unittest.TestCase):
             self.assertEqual(r["decoder_block_frames"],65_536)
             self.assertIsNotNone(r["dominant_pitch_candidate"])
             self.assertEqual(r["dominant_pitch_candidate"]["midi_note"],69)
+
+    def test_reuses_predecoded_audio_without_reading_the_source_twice(self):
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/"a440.wav"; self.make_tone(path)
+            decoded=read_mono_pcm(path, max_samples=90_000)
+            with patch("audio_analysis.read_mono_pcm", side_effect=AssertionError("unexpected second WAV read")):
+                result=analyse_wav(path, decoded=decoded)
+            self.assertAlmostEqual(result["duration_seconds"],1.0,places=3)
+            self.assertEqual(result["dominant_pitch_candidate"]["midi_note"],69)
 
     def test_silence_has_no_pitch(self):
         with tempfile.TemporaryDirectory() as td:
