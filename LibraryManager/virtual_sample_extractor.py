@@ -36,71 +36,144 @@ def sha256_file(path: Path) -> str:
 
 
 def _frame_levels(source: Path, window_ms: int, hop_ms: int) -> tuple[list[dict[str, float]], dict[str, int]]:
+    """Build the exact frame grid with vectorized PCM math and bounded memory."""
     with wave.open(str(source), "rb") as reader:
         if reader.getcomptype() != "NONE":
             raise ValueError("Only uncompressed PCM WAV is supported")
-        channels, width, rate, total = (reader.getnchannels(), reader.getsampwidth(),
-                                        reader.getframerate(), reader.getnframes())
+        channels, width, rate, total = (
+            reader.getnchannels(), reader.getsampwidth(),
+            reader.getframerate(), reader.getnframes(),
+        )
         if width not in (1, 2, 3, 4) or channels < 1 or rate <= 0:
             raise ValueError("Unsupported WAV format")
         window = max(1, round(rate * window_ms / 1000))
         hop = max(1, round(rate * hop_ms / 1000))
         if total < window:
             raise ValueError("WAV is shorter than one analysis window")
-        # Sequential bounded-memory reader: read the first window once, then
-        # advance by hop frames while retaining only the overlap. This avoids
-        # one seek and one overlapping disk read for every 10 ms window.
-        frame_bytes = channels * width
-        levels = []
-        raw = bytearray(reader.readframes(window))
-        if len(raw) != window * frame_bytes:
-            raise IOError("Incomplete PCM analysis window")
-        start = 0
-        scale = float(1 << (8 * width - 1))
-        while len(raw) == window * frame_bytes:
-            square_sum = 0.0
-            crossings = 0
-            previous = None
-            frame_count = 0
-            for offset in range(0, len(raw), frame_bytes):
-                mono = 0.0
-                for channel in range(channels):
-                    sample_start = offset + channel * width
-                    if width == 1:
-                        value = (raw[sample_start] - 128) / 128.0
-                    elif width == 3:
-                        b0, b1, b2 = raw[sample_start:sample_start + 3]
-                        integer = b0 | (b1 << 8) | (b2 << 16)
-                        if integer & 0x800000:
-                            integer -= 0x1000000
-                        value = integer / scale
-                    else:
-                        sample = raw[sample_start:sample_start + width]
-                        value = int.from_bytes(sample, "little", signed=True) / scale
-                    mono += value
-                mono /= channels
-                square_sum += mono * mono
-                if previous is not None and ((previous < 0) != (mono < 0)):
-                    crossings += 1
-                previous = mono
-                frame_count += 1
-            levels.append({
-                "start_sample": start,
-                "end_sample": start + window,
-                "rms": math.sqrt(square_sum / max(1, frame_count)),
-                "zcr": crossings / max(1, frame_count - 1),
-            })
-            if start + hop + window > total:
-                break
-            advance = hop * frame_bytes
-            del raw[:advance]
-            raw.extend(reader.readframes(hop))
-            if len(raw) < window * frame_bytes:
-                break
-            start += hop
-    return levels, {"sample_rate": rate, "channels": channels,
-                    "sample_width_bytes": width, "total_frames": total}
 
+        try:
+            import numpy as np
+        except ImportError:
+            # Compatibility fallback. The packaged Manager includes NumPy.
+            frame_bytes = channels * width
+            levels = []
+            raw = bytearray(reader.readframes(window))
+            if len(raw) != window * frame_bytes:
+                raise IOError("Incomplete PCM analysis window")
+            start = 0
+            scale = float(1 << (8 * width - 1))
+            while len(raw) == window * frame_bytes:
+                square_sum = 0.0
+                crossings = 0
+                previous = None
+                frame_count = 0
+                for offset in range(0, len(raw), frame_bytes):
+                    mono = 0.0
+                    for channel in range(channels):
+                        sample_start = offset + channel * width
+                        if width == 1:
+                            value = (raw[sample_start] - 128) / 128.0
+                        elif width == 3:
+                            b0, b1, b2 = raw[sample_start:sample_start + 3]
+                            integer = b0 | (b1 << 8) | (b2 << 16)
+                            if integer & 0x800000:
+                                integer -= 0x1000000
+                            value = integer / scale
+                        else:
+                            sample = raw[sample_start:sample_start + width]
+                            value = int.from_bytes(sample, "little", signed=True) / scale
+                        mono += value
+                    mono /= channels
+                    square_sum += mono * mono
+                    if previous is not None and ((previous < 0) != (mono < 0)):
+                        crossings += 1
+                    previous = mono
+                    frame_count += 1
+                levels.append({
+                    "start_sample": start,
+                    "end_sample": start + window,
+                    "rms": math.sqrt(square_sum / max(1, frame_count)),
+                    "zcr": crossings / max(1, frame_count - 1),
+                })
+                if start + hop + window > total:
+                    break
+                advance = hop * frame_bytes
+                del raw[:advance]
+                raw.extend(reader.readframes(hop))
+                if len(raw) < window * frame_bytes:
+                    break
+                start += hop
+            return levels, {
+                "sample_rate": rate, "channels": channels,
+                "sample_width_bytes": width, "total_frames": total,
+            }
+
+        def decode_mono(raw: bytes):
+            if width == 1:
+                pcm = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+            elif width == 2:
+                pcm = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
+            elif width == 4:
+                pcm = np.frombuffer(raw, dtype="<i4").astype(np.float32) / 2147483648.0
+            else:
+                triples = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+                integer = triples[:, 0] | (triples[:, 1] << 8) | (triples[:, 2] << 16)
+                integer = np.where(integer & 0x800000, integer - 0x1000000, integer)
+                pcm = integer.astype(np.float32) / 8388608.0
+            if channels > 1:
+                pcm = pcm.reshape(-1, channels).mean(axis=1, dtype=np.float32)
+            return pcm
+
+        levels: list[dict[str, float]] = []
+        # Read large sequential chunks. Only a window-sized overlap is retained
+        # between chunks; no full-file PCM allocation is made.
+        chunk_frames = max(65_536, window * 4)
+        buffer = np.empty(0, dtype=np.float32)
+        buffer_start = 0
+        frames_read = 0
+        next_start = 0
+        while frames_read < total:
+            raw = reader.readframes(min(chunk_frames, total - frames_read))
+            if not raw:
+                break
+            chunk = decode_mono(raw)
+            if buffer.size:
+                combined = np.concatenate((buffer, chunk))
+            else:
+                combined = chunk
+            combined_start = buffer_start
+            frames_read += len(chunk)
+            last_full_start = frames_read - window
+            if last_full_start >= next_start:
+                starts = np.arange(next_start, last_full_start + 1, hop, dtype=np.int64)
+                local_starts = starts - combined_start
+                windows = np.lib.stride_tricks.sliding_window_view(combined, window)[local_starts]
+                rms_values = np.sqrt(
+                    np.einsum("ij,ij->i", windows, windows, dtype=np.float64) / window
+                )
+                crossing_counts = np.count_nonzero(
+                    (windows[:, :-1] < 0) != (windows[:, 1:] < 0), axis=1
+                )
+                zcr_values = crossing_counts / max(1, window - 1)
+                for frame_start, rms, zcr in zip(starts, rms_values, zcr_values):
+                    start_sample = int(frame_start)
+                    levels.append({
+                        "start_sample": start_sample,
+                        "end_sample": start_sample + window,
+                        "rms": float(rms),
+                        "zcr": float(zcr),
+                    })
+                next_start = int(starts[-1]) + hop
+                discard = next_start - combined_start
+                buffer = combined[discard:]
+                buffer_start = next_start
+            else:
+                buffer = combined
+
+    return levels, {
+        "sample_rate": rate, "channels": channels,
+        "sample_width_bytes": width, "total_frames": total,
+    }
 
 def detect_active_ranges(levels: list[dict[str, float]], *, sample_rate: int,
                          total_frames: int, min_duration_ms: int = 250,
