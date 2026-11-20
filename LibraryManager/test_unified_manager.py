@@ -99,7 +99,7 @@ class UnifiedManagerTests(unittest.TestCase):
             ):
                 result = quick_scan(self.samples)
             report_dir = Path(result["report_directory"])
-            self.assertEqual(report_dir.parent, data_root / "reports")
+            self.assertEqual(report_dir.parent.resolve(), (data_root / "reports").resolve())
             self.assertTrue((data_root / "reports").is_dir())
 
     def test_deep_scan_uses_runtime_reports_cache_and_staging_paths(self) -> None:
@@ -121,7 +121,7 @@ class UnifiedManagerTests(unittest.TestCase):
             ) as build_index:
                 result = run_manager(self.samples)
             report_dir = Path(result["report_directory"])
-            self.assertEqual(report_dir.parent, data_root / "reports")
+            self.assertEqual(report_dir.parent.resolve(), (data_root / "reports").resolve())
             self.assertTrue((data_root / "reports" / "scan_cache.sqlite3").is_file())
             staging_root.assert_called_once()
             build_index.assert_called_once_with(expected_staging)
@@ -147,7 +147,7 @@ class UnifiedManagerTests(unittest.TestCase):
         real_scandir = os.scandir
 
         def guarded_scandir(path):
-            if Path(path) == locked:
+            if Path(path).resolve() == locked.resolve():
                 raise PermissionError("simulated nested folder access denied")
             return real_scandir(path)
 
@@ -160,7 +160,7 @@ class UnifiedManagerTests(unittest.TestCase):
         # adds a second readable file and one blocked nested file.
         self.assertEqual(summary["files_found"], 2)
         self.assertEqual(summary["directory_errors"], 1)
-        self.assertEqual(summary["directory_error_details"][0]["path"], str(locked))
+        self.assertEqual(Path(summary["directory_error_details"][0]["path"]).resolve(), locked.resolve())
         report_dir = Path(summary["report_directory"])
         errors = json.loads((report_dir / "quick_errors.json").read_text(encoding="utf-8"))
         self.assertEqual(errors["directory_errors"][0]["stage"], "QUICK_DIRECTORY_SCAN")

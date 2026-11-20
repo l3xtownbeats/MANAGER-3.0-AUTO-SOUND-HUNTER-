@@ -128,7 +128,7 @@ class TransactionalDistributionTests(unittest.TestCase):
         self.assertEqual(result["ready_count"], 1)
         self.assertEqual(result["copied_count"], 1)
         self.assertEqual(len(result["rejected"]), 1)
-        self.assertEqual(Path(result["rejected"][0]["manifest_path"]), bad)
+        self.assertEqual(Path(result["rejected"][0]["manifest_path"]).resolve(), bad.resolve())
         distribute.assert_called_once()
         finalize.assert_called_once()
         self.assertTrue(result["finalization"]["factory_finalized"])
