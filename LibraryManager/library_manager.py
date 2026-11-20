@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse, csv, hashlib, json, os, re, sqlite3, struct, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from performance_profile import HASH_READ_BLOCK_BYTES
 from sfz_parser import parse_sfz_file
 
 AUDIO_EXT = {".wav", ".wave", ".aif", ".aiff", ".flac", ".ogg", ".oga", ".mp3"}
@@ -28,7 +29,7 @@ def is_excluded_label(path: Path) -> bool:
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
+        for block in iter(lambda: f.read(HASH_READ_BLOCK_BYTES), b""):
             h.update(block)
     return h.hexdigest().upper()
 
