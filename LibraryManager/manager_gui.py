@@ -1256,15 +1256,42 @@ class LibraryManagerApp:
                     Path(analysis_result["report_directory"]) / "pattern_engine_manifest.json"
                 ),
             )
+            report_progress("ГРУППИРОВКА SESSION GUITARIST: разделяю PATTERN performances / note zones и отдельные MELODY notes / phrases без дублирования WAV.")
+            chromatic_path = Path(analysis_result["report_directory"]) / "chromatic_pitch_map.json"
+            chromatic_map = build_chromatic_pitch_map(json.loads(catalog_path.read_text(encoding="utf-8")))
+            chromatic_path.write_text(
+                json.dumps(chromatic_map, ensure_ascii=False, indent=2) + "\\n",
+                encoding="utf-8",
+            )
             performance_path = Path(analysis_result["report_directory"]) / "performance_manifest.json"
-            performance_result = build_performance_manifest(catalog_path, performance_path)
+            performance_result = build_performance_manifest(
+                catalog_path, performance_path, chromatic_pitch_map=chromatic_map,
+            )
+            structure_path = Path(analysis_result["report_directory"]) / "plugin_library_structure.json"
+            coverage_path = Path(analysis_result["report_directory"]) / "plugin_library_coverage.json"
+            structure_result = write_library_structure(
+                catalog_path, structure_path, coverage_path,
+            )
+            if structure_result.get("validation_errors"):
+                raise RuntimeError(
+                    "PATTERN / MELODY library structure invalid: "
+                    + "; ".join(structure_result["validation_errors"])
+                )
+            report_progress(
+                f"FACTORY distribution: {factory_distribution_result.get('copied_count', 0)} new, "
+                f"{factory_distribution_result.get('already_present_count', 0)} verified existing. "
+                f"OTHER: {other_routing_result.get('copied_count', 0)} unsupported copies. "
+                f"PATTERN structure verified: {structure_result['summary'].get('pattern_structure_verified_count', 0)}; "
+                f"MELODY structure verified: {structure_result['summary'].get('melody_structure_verified_count', 0)}."
+            )
             report_progress(
                 f"Каталог VST3: {catalog_result['asset_count']} staged assets, "
                 f"{catalog_result['playable_asset_count']} runtime-ready, "
                 f"{catalog_result['candidate_count']} analysis candidates. "
                 f"Performance Manifest: {performance_result['asset_binding_count']} bindings, "
                 f"{performance_result['event_count']} reviewed events. "
-                f"Файлы: {catalog_path}; {performance_path}"
+                f"Library structure: {structure_path}; coverage: {coverage_path}; "
+                f"chromatic map: {chromatic_path}."
             )
             return {
                 "quick_scan": quick_result,
@@ -1288,6 +1315,16 @@ class LibraryManagerApp:
                 "other_routing": other_routing_result,
                 "plugin_asset_catalog": catalog_result,
                 "performance_manifest": performance_result,
+                "library_structure": structure_result,
+                "chromatic_pitch_map": {
+                    "path": str(chromatic_path),
+                    "pitch_class_count": len(chromatic_map["pitch_classes"]),
+                    "midi_key_count": chromatic_map["coverage"]["midi_key_count"],
+                    "exact_sample_count": chromatic_map["coverage"]["exact_approved_sample_count"],
+                    "fallback_proposal_count": chromatic_map["coverage"]["fallback_proposal_count"],
+                    "missing_source_count": chromatic_map["coverage"]["missing_source_count"],
+                    "runtime_status": chromatic_map["runtime_status"],
+                },
                 "source_files_modified": False,
                 "source_files_moved_or_deleted": False,
             }
