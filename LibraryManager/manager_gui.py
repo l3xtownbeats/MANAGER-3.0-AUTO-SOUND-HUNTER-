@@ -7,6 +7,8 @@ All file operations remain review-gated by library_operations.py.
 from __future__ import annotations
 
 import json
+import os
+import re
 import queue
 import threading
 import traceback
@@ -36,6 +38,9 @@ from library_operations import (
     auto_distribute_approved,
 )
 from ppgu_theme import NEON_STAGE_THEME, resource_path, configure_neon_stage_ttk
+from performance_profile import (
+    apply_windows_resource_limits, performance_profile_text,
+)
 
 APP_VERSION = "3.0.0"
 BUNDLE_DIR, MANAGER_DIR, PORTABLE_MODE = resolve_runtime_paths(__file__)
@@ -57,6 +62,10 @@ class LibraryManagerApp:
         self.analyze_audio = tk.BooleanVar(value=True)
         self.guitar_confirmed = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Готов. Выберите Samples или непосредственно Import Sample Guitar.")
+        self._resource_limits = apply_windows_resource_limits()
+        self._performance_profile = performance_profile_text()
+        self._scan_progress_value = tk.DoubleVar(value=0.0)
+        self._scan_progress_message = tk.StringVar(value="READY  /  ОЖИДАНИЕ ЗАДАЧИ")
         # Worker threads must never call Tkinter methods. They only enqueue events;
         # the Tk main thread drains this queue in _poll_worker_events().
         self._worker_events = queue.Queue()
@@ -266,7 +275,7 @@ class LibraryManagerApp:
         self._skin_hero = None
         try:
             hero = tk.PhotoImage(file=str(resource_path("assets", "hero.png")))
-            factor = max(1, (hero.width() + 179) // 180, (hero.height() + 89) // 90)
+            factor = max(1, (hero.width() + 239) // 240, (hero.height() + 134) // 135)
             self._skin_hero = hero.subsample(factor, factor)
             tk.Label(
                 header, image=self._skin_hero, bg=panel,
@@ -317,54 +326,49 @@ class LibraryManagerApp:
         section_head = tk.Frame(outer, bg=bg)
         section_head.pack(fill="x", pady=(0, 8))
         tk.Label(
-            section_head, text="ОСНОВНОЙ РАБОЧИЙ ПОТОК",
+            section_head, text="NEON STAGE  /  PRIMARY OPERATIONS",
             bg=bg, fg=text, font=("Segoe UI", 12, "bold"),
         ).pack(side="left")
         tk.Label(
-            section_head, text="6 ОСНОВНЫХ ЭТАПОВ  •  ОРИГИНАЛЫ ЗАЩИЩЕНЫ",
+            section_head, text="2 ГЛАВНЫЕ ОПЕРАЦИИ  •  ПОЛНЫЙ WORKFLOW В МЕНЮ",
             bg=bg, fg=muted, font=("Segoe UI", 8, "bold"),
         ).pack(side="right")
 
         cards = tk.Frame(outer, bg=bg)
         cards.pack(fill="x")
-        for column in range(3):
-            cards.grid_columnconfigure(column, weight=1, uniform="workflow")
+        cards.grid_columnconfigure(0, weight=1, uniform="primary")
+        cards.grid_columnconfigure(1, weight=1, uniform="primary")
 
-        workflow = [
-            ("01", "IMPORT GUITAR",
-             "Импорт файлов и папок в Import Sample Guitar с SHA-256-проверкой копий. Оригиналы остаются нетронутыми.",
-             self.import_guitar, "SOURCE INTAKE"),
-            ("02", "SCAN LIBRARY",
-             "Быстрая инвентаризация структуры, форматов и SFZ-зависимостей. Хеширование и декодирование — только по необходимости.",
-             self.deep_scan_only, "SMART SCAN"),
-            ("03", "START HUNTING",
-             "Поиск нот, паттернов, риффов и музыкальных кандидатов. Сомнительные результаты не получают выдуманных тегов.",
-             self.scan, "AUDIO INTELLIGENCE"),
-            ("04", "REVIEW QUEUE",
-             "Прослушивание оригиналов и производных, проверка границ, нот, артикуляций, категорий библиотеки VST3 и лицензии.",
-             self.open_review_queue, "HUMAN APPROVAL"),
-            ("05", "BUILD LIBRARY",
-             "Сборка каталога подготовленных ассетов и Performance Manifest для отдельного VST3. Неодобренное остаётся в staging.",
-             self.build_plugin_catalog, "LIBRARY CATALOG"),
-            ("06", "VERIFY / RECOVERY",
-             "Целостность WAV и manifests, SHA-256, provenance, лицензии, отчёты и безопасное восстановление.",
-             self.finalize_library, "INTEGRITY / RECOVERY"),
+        primary_operations = [
+            (
+                "01", "IMPORT SAMPLE GUITAR",
+                "Добавить WAV / SFZ / архивы и целые папки. Manager создаёт проверенные копии, "
+                "сохраняет зависимости SFZ и SHA-256; оригиналы остаются нетронутыми.",
+                self.import_guitar, "SOURCE INTAKE  /  VERIFIED COPY", accent,
+                "ОТКРЫТЬ ИМПОРТ",
+            ),
+            (
+                "02", "START SCAN HUNTING",
+                "Единый полный цикл: инвентаризация, SHA-256, SFZ, акустика, поиск нот и паттернов, "
+                "извлечение кандидатов, отчёты и подготовка к ручной проверке.",
+                self.scan, "FULL LIBRARY INTELLIGENCE  /  REVIEW GATED", accent_purple,
+                "ЗАПУСТИТЬ ПОЛНЫЙ АНАЛИЗ",
+            ),
         ]
 
         self._action_buttons = []
-        for index, (number, title, description, command, tag) in enumerate(workflow):
-            row, column = divmod(index, 3)
+        for index, (number, title, description, command, tag, edge, button_text) in enumerate(primary_operations):
             card = tk.Frame(
                 cards, bg=panel, highlightbackground=border,
-                highlightthickness=1, padx=14, pady=12,
+                highlightthickness=2, padx=18, pady=16,
             )
-            card.grid(row=row, column=column, sticky="nsew", padx=5, pady=5)
-            tk.Frame(card, bg=(accent, accent_purple, accent_magenta)[index % 3], height=3).pack(fill="x", pady=(0, 10))
+            card.grid(row=0, column=index, sticky="nsew", padx=6, pady=5)
+            tk.Frame(card, bg=edge, height=4).pack(fill="x", pady=(0, 12))
             top = tk.Frame(card, bg=panel)
             top.pack(fill="x")
             tk.Label(
-                top, text=number, bg=panel, fg=accent,
-                font=("Consolas", 17, "bold"),
+                top, text=number, bg=panel, fg=accent_glow,
+                font=("Consolas", 25, "bold"),
             ).pack(side="left")
             tk.Label(
                 top, text=tag, bg=panel, fg=muted,
@@ -372,19 +376,93 @@ class LibraryManagerApp:
             ).pack(side="right")
             tk.Label(
                 card, text=title, bg=panel, fg=text,
-                font=("Segoe UI", 10, "bold"), anchor="w",
-            ).pack(fill="x", pady=(4, 5))
+                font=("Segoe UI", 14, "bold"), anchor="w",
+            ).pack(fill="x", pady=(8, 7))
             tk.Label(
                 card, text=description, bg=panel, fg=muted,
-                font=("Segoe UI", 8), justify="left", anchor="nw",
-                wraplength=330, height=3,
-            ).pack(fill="both", expand=True, pady=(0, 10))
+                font=("Segoe UI", 9), justify="left", anchor="nw",
+                wraplength=500, height=3,
+            ).pack(fill="both", expand=True, pady=(0, 12))
+            button_style = "PPGU.Primary.TButton" if index == 0 else "PPGU.Scan.TButton"
             button = ttk.Button(
-                card, text="ОТКРЫТЬ ЭТАП",
-                command=command, style="PPGU.Primary.TButton",
+                card, text=button_text,
+                command=command, style=button_style,
             )
-            button.pack(fill="x")
+            button.pack(fill="x", ipady=5)
             self._action_buttons.append(button)
+
+        # Operational instrument panels use actual runtime configuration and task progress.
+        telemetry = tk.Frame(outer, bg=bg)
+        telemetry.pack(fill="x", pady=(8, 0))
+        for column in range(3):
+            telemetry.grid_columnconfigure(column, weight=1, uniform="telemetry")
+
+        engine_panel = tk.Frame(
+            telemetry, bg=panel_alt, highlightbackground=border,
+            highlightthickness=1, padx=12, pady=10,
+        )
+        engine_panel.grid(row=0, column=0, sticky="nsew", padx=4)
+        tk.Label(
+            engine_panel, text="NEON ENGINE  /  PERFORMANCE",
+            bg=panel_alt, fg=accent_glow, font=("Segoe UI", 8, "bold"),
+        ).pack(anchor="w")
+        limit_state = "WINDOWS LIMITS ENFORCED" if self._resource_limits.get("applied") else "BOUNDED SCAN PROFILE"
+        tk.Label(
+            engine_panel, text=limit_state, bg=panel_alt,
+            fg=green if self._resource_limits.get("applied") else amber,
+            font=("Segoe UI", 7, "bold"),
+        ).pack(anchor="w", pady=(5, 4))
+        tk.Label(
+            engine_panel, text=self._performance_profile,
+            bg=panel_alt, fg=text, justify="left", anchor="w",
+            font=("Consolas", 8), wraplength=330,
+        ).pack(fill="x")
+
+        activity_panel = tk.Frame(
+            telemetry, bg=panel_alt, highlightbackground=border,
+            highlightthickness=1, padx=12, pady=10,
+        )
+        activity_panel.grid(row=0, column=1, sticky="nsew", padx=4)
+        tk.Label(
+            activity_panel, text="SCAN TELEMETRY  /  LIVE",
+            bg=panel_alt, fg=accent_glow, font=("Segoe UI", 8, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            activity_panel, textvariable=self._scan_progress_message,
+            bg=panel_alt, fg=text, justify="left", anchor="w",
+            font=("Consolas", 8), wraplength=330,
+        ).pack(fill="x", pady=(6, 5))
+        self._scan_progressbar = ttk.Progressbar(
+            activity_panel, variable=self._scan_progress_value,
+            maximum=100, mode="determinate", style="PPGU.Horizontal.TProgressbar",
+        )
+        self._scan_progressbar.pack(fill="x", ipady=3, pady=(1, 5))
+        tk.Label(
+            activity_panel, text="Heartbeat reports the active WAV while a long file is being analysed.",
+            bg=panel_alt, fg=muted, font=("Segoe UI", 7),
+            wraplength=330, justify="left",
+        ).pack(anchor="w")
+
+        gate_panel = tk.Frame(
+            telemetry, bg=panel_alt, highlightbackground=border,
+            highlightthickness=1, padx=12, pady=10,
+        )
+        gate_panel.grid(row=0, column=2, sticky="nsew", padx=4)
+        tk.Label(
+            gate_panel, text="FACTORY  /  INTEGRITY GATE",
+            bg=panel_alt, fg=accent_glow, font=("Segoe UI", 8, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            gate_panel, text="REVIEWED  +  LICENSE_APPROVED  +  VERIFIED",
+            bg=panel_alt, fg=green, font=("Consolas", 8, "bold"),
+            justify="left", wraplength=330,
+        ).pack(anchor="w", pady=(6, 5))
+        tk.Label(
+            gate_panel,
+            text="Исходники: READ-ONLY   •   Кандидаты: STAGING   •   FACTORY: только подтверждённые материалы",
+            bg=panel_alt, fg=muted, font=("Segoe UI", 8),
+            justify="left", wraplength=330,
+        ).pack(fill="x")
 
         # Persistent activity console: the only always-visible secondary surface.
         log_panel = tk.Frame(
