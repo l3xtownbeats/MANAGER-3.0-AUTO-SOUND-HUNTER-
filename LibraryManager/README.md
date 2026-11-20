@@ -15,7 +15,7 @@ Do not reinterpret, redesign, replace, or remove a baseline decision without the
 >
 > This boundary must not be changed without the user's explicit approval.
 
-## Manager 3.0.0-dev9 — six primary dashboard actions and supporting tools
+## Manager 3.0.0 — six primary dashboard actions and supporting tools
 
 This release line contains the six-stage Manager workflow: IMPORT GUITAR, SCAN LIBRARY, START HUNTING, REVIEW QUEUE, BUILD LIBRARY and VERIFY / RECOVERY. Source audio remains read-only during import, scan and analysis; approved Factory distribution is a separate, explicit, verified copy operation.
 
@@ -473,7 +473,7 @@ The unified run now emits `reviewed_mode_assignment_index.json` beside the analy
 
 All ten approved VST3 library target categories are always represented in the catalog. These categories are asset-preparation destinations, not Manager operating modes. One staged WAV can be logically assigned to several categories without physical duplication. An assignment is not automatically runtime-ready: the index checks musical review, license approval, derived WAV integrity, and mode-specific mapping gates. Unknown or missing evidence remains a blocker, never a fabricated note or articulation.
 
-Version 3.0 remains a development build until the complete Windows regression suite, portable package smoke test, real-library validation, and user-side workflow checks are successful.
+The 3.0.0 automated release gates are recorded in [V3_0_RELEASE_NOTES_RU.md](V3_0_RELEASE_NOTES_RU.md): Linux and Windows regression suites, Portable package checks, and installed-mode startup/data-root smoke tests passed. User-provided Samples still require first-run validation by the operator; CI fixtures do not replace review and listening checks on the real library.
 
 ## Manager 3.0 — prepared VST3 library structure and coverage
 
@@ -511,4 +511,4 @@ The manual review dialog now records explicit technique tags (Downstroke, Upstro
 - BUILD LIBRARY can process all staging manifests automatically. Only independently reviewed, license-approved and integrity-verified candidates enter FACTORY. Each asset is copied in its own transaction; a failed asset does not roll back earlier verified copies. A final staging/FACTORY audit report is generated after distribution.
 - Inaccessible nested folders, locked files and unreadable Factory directories are recorded and do not silently turn a partial scan into a successful complete scan.
 
-The two Windows package types are defined in the workflow: Portable ZIP and Inno Setup installer EXE. They are **not considered release artifacts until the latest workflow succeeds and both packages pass startup and functional acceptance**. Manager 3.0 remains a development build while that verification is blocked.
+The Windows delivery workflow produces two distinct packages: Portable ZIP and Inno Setup installer EXE. Both package paths now have successful Windows startup smoke tests. See [V3_0_RELEASE_NOTES_RU.md](V3_0_RELEASE_NOTES_RU.md) for the exact CI runs, artifact links and remaining operator-side acceptance boundary.
