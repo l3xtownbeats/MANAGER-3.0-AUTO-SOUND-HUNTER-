@@ -16,6 +16,7 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from performance_profile import HASH_READ_BLOCK_BYTES
 from typing import Iterable
 
 AUDIO_EXTENSIONS = {
@@ -303,7 +304,7 @@ def register_sources(
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
+        for block in iter(lambda: stream.read(HASH_READ_BLOCK_BYTES), b""):
             digest.update(block)
     return digest.hexdigest().upper()
 
@@ -329,13 +330,13 @@ def _copy_verified(
         while True:
             if cancel_event is not None and cancel_event.is_set():
                 raise InterruptedError("IMPORT GUITAR остановлен пользователем.")
-            block = src.read(1024 * 1024)
+            block = src.read(HASH_READ_BLOCK_BYTES)
             if not block:
                 break
             dst.write(block)
             digest.update(block)
             size += len(block)
-            if progress and (size % (16 * 1024 * 1024) < len(block)):
+            if progress and (size % (16 * HASH_READ_BLOCK_BYTES) < len(block)):
                 progress(f"Копирование: {source.name} — {size:,} байт…")
         dst.flush()
         os.fsync(dst.fileno())
