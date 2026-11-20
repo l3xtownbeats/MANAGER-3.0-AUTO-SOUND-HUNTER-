@@ -388,6 +388,14 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
             "metadata": pattern_metadata,
             "selector_key": pattern_metadata.get("confirmed_pattern_selector_key")
                 or metadata.get("confirmed_pattern_selector_key"),
+            "loop_playback_mode": (
+                "FULL_SOURCE_LOOP"
+                if pattern_metadata.get("loop_start_sample") == 0
+                and type(asset.get("frame_count")) is int
+                and pattern_metadata.get("loop_end_sample") == asset.get("frame_count")
+                else "EXTRACTED_LOOP_FRAGMENT"
+            ),
+            "loop_content_unchanged": pattern_metadata.get("cycle_integrity_verified") is True,
         })
         global_assets.setdefault(asset_id, {
             "asset_id": asset_id, "asset_file": asset.get("asset_file"),
