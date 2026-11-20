@@ -1132,3 +1132,14 @@ PPGU использует собственный визуальный язык �
 - Commit: b31edac43d21491a2b12840257351d12e90adb70.
 - Linux regression run на этом commit завершился SUCCESS. Повторный Windows Package run на том же exact commit должен подтвердить полный Windows regression suite, Portable ZIP startup/contents и Installer smoke test.
 - До успешного Windows Package acceptance финальный 3.0.0 и релизный артефакт не объявлять.
+
+## Запись TJ-2026-11-20-MANAGER-3.0.0-RELEASE-039 — стабильная версия и финальная exact-head перепроверка
+
+- Дата: 2026-11-20
+- Тип: **ФАКТИЧЕСКАЯ ЗАПИСЬ О СТАБИЛИЗАЦИИ ВЕРСИИ / RELEASE ACCEPTANCE**
+- Перед переводом номера версии в 3.0.0 commit `276907006060ed8057a371f41b66d59e22f36f8f` прошёл Linux regression run #19 (239 tests, OK) и Windows Package run #17 (239 tests, OK).
+- Windows Package #17 также успешно выполнил PyInstaller onedir build, проверку python runtime и ресурсов NEON STAGE, Portable startup + UserData, проверку Portable ZIP, сборку Inno Setup, silent install, запуск installed app и проверку data root в LocalAppData. У обоих Windows artifacts статус upload SUCCESS.
+- Артефакты pre-version-bump CI: Portable ZIP artifact 14625832811; Installer EXE artifact 14626326485.
+- GUI `APP_VERSION`, unified manager `VERSION` и Inno Setup `MyAppVersion` выровнены на `3.0.0`. Добавлен `V3_0_RELEASE_NOTES_RU.md`; README обновлены. Кодовые алгоритмы при version bump не менялись.
+- После изменения версии и release documentation выполняется повторный Linux/Windows exact-head CI. Только артефакты, произведённые успешным post-bump CI, могут считаться финальными 3.0.0 downloads.
+- Граница acceptance: CI использует regression fixtures. Проверка с реальной пользовательской папкой Samples, прослушивание конкретной библиотеки и подтверждение её лицензий остаются отдельной операторской приёмкой; никакой не проверенный asset не становится READY автоматически.
