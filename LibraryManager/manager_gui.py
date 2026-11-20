@@ -1150,16 +1150,31 @@ class LibraryManagerApp:
             if self._cancel_event.is_set():
                 raise RuntimeError("Полный цикл остановлен до финализации; исходные файлы не изменены.")
 
-            report_progress("ЭТАП 7/8: финальная проверка SHA-256, границ, PCM WAV, музыкального статуса и лицензии.")
-            finalization_result = finalize_library_audit(
+            report_progress("ЭТАП 7/8: распределение проверенных кандидатов в FACTORY по музыкальным категориям. Только REVIEWED + LICENSE_APPROVED + SHA-256 VERIFIED.")
+            factory_distribution_result = auto_distribute_approved(
                 samples, STAGING_ROOT,
-                progress=report_progress,
+                approve=True,
+                journal_path=samples / "FACTORY" / "LibraryManagerReports" / "operations.jsonl",
                 cancel_event=self._cancel_event,
+                progress=report_progress,
             )
             if self._cancel_event.is_set():
-                raise RuntimeError("Полный цикл остановлен до сборки каталога; исходные файлы не изменены.")
+                raise RuntimeError("Полный цикл остановлен во время распределения FACTORY; уже проверенные копии сохранены, исходники не затронуты.")
+            finalization_result = factory_distribution_result.get("finalization")
+            if finalization_result is None:
+                report_progress("Дополнительный аудит staging / FACTORY после незавершённого шага распределения.")
+                finalization_result = finalize_library_audit(
+                    samples, STAGING_ROOT,
+                    progress=report_progress,
+                    cancel_event=self._cancel_event,
+                )
 
-            report_progress("ЭТАП 8/8: проверка и сборка каталога по 10 категориям подготовленной библиотеки для VST3.")
+            report_progress("ЭТАП 8/8: копирование объективно неподдерживаемых файлов в OTHER и сборка каталога VST3.")
+            other_routing_result = copy_unsupported_to_other(
+                samples, progress=report_progress, cancel_event=self._cancel_event,
+            )
+            if self._cancel_event.is_set():
+                raise RuntimeError("Полный цикл остановлен на этапе OTHER; исходные файлы сохранены.")
             catalog_path = Path(analysis_result["report_directory"]) / "plugin_asset_catalog.json"
             catalog_result = build_plugin_asset_catalog(
                 STAGING_ROOT,
@@ -1197,6 +1212,8 @@ class LibraryManagerApp:
                     "license_status": "UNREVIEWED",
                 },
                 "finalization": finalization_result,
+                "factory_distribution": factory_distribution_result,
+                "other_routing": other_routing_result,
                 "plugin_asset_catalog": catalog_result,
                 "performance_manifest": performance_result,
                 "source_files_modified": False,
@@ -1204,8 +1221,8 @@ class LibraryManagerApp:
             }
 
         self._write("=== ПОЛНЫЙ ЦИКЛ ПОДГОТОВКИ БИБЛИОТЕКИ ===")
-        self._write("Быстрый scan → глубокая инвентаризация → акустика/ритм → извлечение длинных отрывков + Pattern/Sample/Melody WAV → аудит staging.")
-        self._write("Извлечение запускается только после ручного подтверждения гитарного источника. FACTORY остаётся защищённой review/license gate.")
+        self._write("Полный цикл: SCAN → аудиоанализ / сортировка → извлечение WAV → Factory review-gated distribution → OTHER unsupported copies → финальный каталог.")
+        self._write("В FACTORY попадают только ранее вручную REVIEWED + LICENSE_APPROVED материалы с подтверждёнными SHA-256 и границами. Неподтверждённые аудио остаются в staging/Import для проверки; только неподдерживаемые типы копируются в OTHER.")
         self._write(f"Акустический анализ: {'ВКЛЮЧЁН' if analyze_audio else 'ВЫКЛЮЧЕН'}")
         self._write(f"Гитарный источник подтверждён: {'ДА' if guitar_confirmed else 'НЕТ'}")
         self._background("SCAN HUNTING — полный проход и анализ Import Sample Guitar", work)
