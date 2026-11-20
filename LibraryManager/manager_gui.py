@@ -38,6 +38,7 @@ from library_operations import (
     auto_distribute_approved,
 )
 from ppgu_theme import NEON_STAGE_THEME, resource_path, configure_neon_stage_ttk
+from neon_stage_widgets import NeonStageButton, NeonStageRail
 from performance_profile import (
     apply_windows_resource_limits, performance_profile_text,
     recommended_scan_workers,
@@ -328,8 +329,8 @@ class LibraryManagerApp:
 
         # The location is visible, but path-changing controls live in the Project menu.
         path_panel = tk.Frame(
-            outer, bg=panel, highlightbackground=border,
-            highlightthickness=1, padx=14, pady=10,
+            outer, bg=panel_alt, highlightbackground=palette["highlight"],
+            highlightthickness=2, bd=3, relief="sunken", padx=14, pady=10,
         )
         path_panel.pack(fill="x", pady=(0, 15))
         tk.Label(
@@ -339,7 +340,7 @@ class LibraryManagerApp:
         self.samples_entry = tk.Entry(
             path_panel, textvariable=self.samples_root,
             bg=control_bg, fg=text, insertbackground=accent,
-            relief="flat", highlightthickness=1,
+            relief="sunken", bd=2, highlightthickness=2,
             highlightbackground=border, highlightcolor=accent,
             font=("Consolas", 9), readonlybackground=control_bg,
             state="readonly",
@@ -382,11 +383,11 @@ class LibraryManagerApp:
         self._action_buttons = []
         for index, (number, title, description, command, tag, edge, button_text) in enumerate(primary_operations):
             card = tk.Frame(
-                cards, bg=panel, highlightbackground=palette["highlight"],
-                highlightthickness=2, bd=2, relief="ridge", padx=18, pady=16,
+                cards, bg=panel_alt, highlightbackground=edge,
+                highlightthickness=3, bd=4, relief="raised", padx=18, pady=16,
             )
             card.grid(row=0, column=index, sticky="nsew", padx=6, pady=5)
-            tk.Frame(card, bg=edge, height=4).pack(fill="x", pady=(0, 12))
+            NeonStageRail(card, accent=edge, height=8).pack(fill="x", pady=(0, 12))
             top = tk.Frame(card, bg=panel)
             top.pack(fill="x")
             tk.Label(
@@ -406,12 +407,12 @@ class LibraryManagerApp:
                 font=("Segoe UI", 9), justify="left", anchor="nw",
                 wraplength=500, height=3,
             ).pack(fill="both", expand=True, pady=(0, 12))
-            button_style = "PPGU.Primary.TButton" if index == 0 else "PPGU.Scan.TButton"
-            button = ttk.Button(
-                card, text=button_text,
-                command=command, style=button_style,
+            button = NeonStageButton(
+                card, text=button_text, command=command,
+                palette=palette, accent=edge, height=64,
+                font=("Segoe UI", 10, "bold"),
             )
-            button.pack(fill="x", ipady=5)
+            button.pack(fill="x", pady=(4, 0))
             self._action_buttons.append(button)
 
         # Operational instrument panels use actual runtime configuration and task progress.
@@ -422,7 +423,7 @@ class LibraryManagerApp:
 
         engine_panel = tk.Frame(
             telemetry, bg=panel_alt, highlightbackground=palette["highlight"],
-            highlightthickness=1, bd=1, relief="ridge", padx=12, pady=10,
+            highlightthickness=2, bd=3, relief="raised", padx=12, pady=10,
         )
         engine_panel.grid(row=0, column=0, sticky="nsew", padx=4)
         tk.Label(
@@ -442,8 +443,8 @@ class LibraryManagerApp:
         ).pack(fill="x")
 
         activity_panel = tk.Frame(
-            telemetry, bg=panel_alt, highlightbackground=border,
-            highlightthickness=1, padx=12, pady=10,
+            telemetry, bg=panel_alt, highlightbackground=accent_glow,
+            highlightthickness=2, bd=3, relief="raised", padx=12, pady=10,
         )
         activity_panel.grid(row=0, column=1, sticky="nsew", padx=4)
         tk.Label(
@@ -467,8 +468,8 @@ class LibraryManagerApp:
         ).pack(anchor="w")
 
         gate_panel = tk.Frame(
-            telemetry, bg=panel_alt, highlightbackground=border,
-            highlightthickness=1, padx=12, pady=10,
+            telemetry, bg=panel_alt, highlightbackground=accent_purple,
+            highlightthickness=2, bd=3, relief="raised", padx=12, pady=10,
         )
         gate_panel.grid(row=0, column=2, sticky="nsew", padx=4)
         tk.Label(
@@ -489,8 +490,8 @@ class LibraryManagerApp:
 
         # Persistent activity console: the only always-visible secondary surface.
         log_panel = tk.Frame(
-            outer, bg=lcd_bg, highlightbackground=border,
-            highlightthickness=1, padx=12, pady=9,
+            outer, bg=lcd_bg, highlightbackground=accent_glow,
+            highlightthickness=2, bd=3, relief="sunken", padx=12, pady=9,
         )
         log_panel.pack(fill="both", expand=True, pady=(12, 0))
         log_header = tk.Frame(log_panel, bg=lcd_bg)
@@ -523,8 +524,8 @@ class LibraryManagerApp:
         self.log.configure(state="disabled")
 
         status_panel = tk.Frame(
-            outer, bg=panel_alt, highlightbackground=border,
-            highlightthickness=1, padx=12, pady=8,
+            outer, bg=panel_alt, highlightbackground=palette["highlight"],
+            highlightthickness=2, bd=3, relief="raised", padx=12, pady=8,
         )
         status_panel.pack(fill="x", pady=(9, 0))
         tk.Label(
@@ -535,9 +536,10 @@ class LibraryManagerApp:
             status_panel, textvariable=self.status, bg=panel_alt,
             fg=text, font=("Segoe UI", 8), anchor="w",
         ).pack(side="left", fill="x", expand=True)
-        self._cancel_button = ttk.Button(
+        self._cancel_button = NeonStageButton(
             status_panel, text="ОСТАНОВИТЬ ЗАДАЧУ",
-            command=self.cancel_job, style="PPGU.Danger.TButton", state="disabled",
+            command=self.cancel_job, palette=palette, accent=red,
+            height=42, font=("Segoe UI", 8, "bold"), state="disabled",
         )
         self._cancel_button.pack(side="right", padx=(8, 0))
 
