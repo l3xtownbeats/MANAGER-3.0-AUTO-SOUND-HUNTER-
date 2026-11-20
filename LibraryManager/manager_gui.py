@@ -144,10 +144,11 @@ class LibraryManagerApp:
             foreground=[("disabled", disabled)],
             bordercolor=[("active", accent_glow)],
         )
+        # Restrained workstation controls: blue primary action, dark outlined scan action.
         style.configure(
             "PPGU.Import.TButton", background=accent, foreground="#FFFFFF",
-            bordercolor=accent, lightcolor=accent_glow, darkcolor=lowlight,
-            padding=(18, 13), font=("Segoe UI", 10, "bold"), relief="flat",
+            bordercolor=accent, lightcolor=accent_glow, darkcolor=accent,
+            padding=(16, 10), font=("Segoe UI", 9, "bold"), relief="flat",
         )
         style.map(
             "PPGU.Import.TButton",
@@ -156,14 +157,14 @@ class LibraryManagerApp:
             bordercolor=[("active", accent_glow), ("focus", accent_glow)],
         )
         style.configure(
-            "PPGU.Scan.TButton", background=accent_magenta, foreground="#FFFFFF",
-            bordercolor=accent_magenta, lightcolor=accent_magenta, darkcolor=accent_purple,
-            padding=(18, 13), font=("Segoe UI", 10, "bold"), relief="flat",
+            "PPGU.Scan.TButton", background=control_face, foreground=accent_magenta,
+            bordercolor=accent_magenta, lightcolor=border, darkcolor=panel_alt,
+            padding=(16, 10), font=("Segoe UI", 9, "bold"), relief="flat",
         )
         style.map(
             "PPGU.Scan.TButton",
-            background=[("disabled", control_face), ("pressed", accent_purple), ("active", accent_purple)],
-            foreground=[("disabled", disabled), ("pressed", "#FFFFFF"), ("active", "#FFFFFF")],
+            background=[("disabled", control_bg), ("pressed", panel_alt), ("active", panel_alt)],
+            foreground=[("disabled", disabled), ("pressed", accent_glow), ("active", accent_glow)],
             bordercolor=[("active", accent_glow), ("focus", accent_glow)],
         )
         style.configure(
@@ -382,11 +383,17 @@ class LibraryManagerApp:
                 copy, text=title, bg=panel, fg=text,
                 font=("Segoe UI", 11, "bold"), anchor="w",
             ).pack(anchor="w")
-            tk.Label(
+            detail_label = tk.Label(
                 copy, text=detail, bg=panel, fg=muted,
                 font=("Segoe UI", 8), justify="left", anchor="w",
                 wraplength=720,
-            ).pack(fill="x", anchor="w", pady=(3, 2))
+            )
+            detail_label.pack(fill="x", anchor="w", pady=(3, 2))
+            copy.bind(
+                "<Configure>",
+                lambda event, label=detail_label:
+                    label.configure(wraplength=max(240, event.width - 16)),
+            )
             tk.Label(
                 copy, text=scope, bg=panel, fg=action_accent,
                 font=("Consolas", 7, "bold"), anchor="w",
