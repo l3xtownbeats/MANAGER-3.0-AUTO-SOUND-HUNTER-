@@ -356,7 +356,7 @@ def copy_unsupported_to_other(
                 }
                 with sidecar.open("x", encoding="utf-8") as stream:
                     json.dump(record, stream, ensure_ascii=False, indent=2)
-                    stream.write("\\n")
+                    stream.write("\n")
                     stream.flush()
                     os.fsync(stream.fileno())
                 with journal.open("a", encoding="utf-8") as stream:
