@@ -1235,6 +1235,48 @@ class LibraryManagerApp:
             extracted_melody_notes = 0
             extracted_melody = 0
             extraction_failures = []
+            # Incremental FACTORY flush: do not wait for the complete scan.
+            # Only candidates that already pass the existing review, license,
+            # provenance, PCM and SHA-256 gates can be copied.
+            incremental_factory = {
+                "copied_count": 0,
+                "already_present_count": 0,
+                "flush_count": 0,
+                "rejected": [],
+                "failed": [],
+                "results": [],
+            }
+
+            def flush_factory_batch(stage_label: str) -> None:
+                if self._cancel_event.is_set():
+                    return
+                report_progress(
+                    f"ПРОМЕЖУТОЧНАЯ ОТПРАВКА В FACTORY: {stage_label}. "
+                    "Проверяю уже одобренные кандидаты, не дожидаясь завершения всего Scan Hunting."
+                )
+                batch_result = auto_distribute_approved(
+                    samples, STAGING_ROOT,
+                    approve=True,
+                    journal_path=samples / "FACTORY" / "LibraryManagerReports" / "operations.jsonl",
+                    cancel_event=self._cancel_event,
+                    progress=report_progress,
+                )
+                incremental_factory["flush_count"] += 1
+                incremental_factory["copied_count"] += int(batch_result.get("copied_count", 0))
+                incremental_factory["already_present_count"] = max(
+                    incremental_factory["already_present_count"],
+                    int(batch_result.get("already_present_count", 0)),
+                )
+                incremental_factory["rejected"].extend(batch_result.get("rejected", []))
+                incremental_factory["failed"].extend(batch_result.get("failed", []))
+                incremental_factory["results"].extend(batch_result.get("results", []))
+                report_progress(
+                    f"ПРОМЕЖУТОЧНАЯ ОТПРАВКА: добавлено сейчас "
+                    f"{batch_result.get('copied_count', 0)}; всего в этой сессии "
+                    f"{incremental_factory['copied_count']}. "
+                    "Непроверенные кандидаты остаются в REVIEW QUEUE."
+                )
+
             report_file = Path(analysis_result["report_directory"]) / "unified_audio_analysis.json"
             if analyze_audio and guitar_confirmed and report_file.is_file():
                 records = json.loads(report_file.read_text(encoding="utf-8"))
@@ -1265,6 +1307,7 @@ class LibraryManagerApp:
                                 progress=report_progress,
                             )
                             extracted_region += len(clips)
+                            flush_factory_batch("LONG RECORDING / текущая партия WAV")
                     except Exception as exc:
                         if self._cancel_event.is_set():
                             raise
@@ -1306,6 +1349,7 @@ class LibraryManagerApp:
                                 }, STAGING_ROOT, max_clips=10000,
                                     cancel_event=self._cancel_event)
                                 extracted_pattern += len(clips)
+                                flush_factory_batch("PATTERN / текущая партия WAV")
                     except Exception as exc:
                         if self._cancel_event.is_set():
                             raise
@@ -1368,6 +1412,7 @@ class LibraryManagerApp:
                             cancel_event=self._cancel_event,
                         )
                         extracted_sample += result["sample_mode_count"]
+                        flush_factory_batch(f"SAMPLE / MELODY / {source.name}")
                         extracted_melody_notes += result.get("melody_note_mode_count", 0)
                         extracted_melody += result["melody_mode_count"]
                         if result["sample_mode_count"] + result["melody_mode_count"] == 0:
@@ -1402,13 +1447,21 @@ class LibraryManagerApp:
                 raise RuntimeError("Полный цикл остановлен до финализации; исходные файлы не изменены.")
 
             report_progress("ЭТАП 7/8: распределение проверенных кандидатов в FACTORY по музыкальным категориям. Только REVIEWED + LICENSE_APPROVED + SHA-256 VERIFIED.")
-            factory_distribution_result = auto_distribute_approved(
+            final_factory_pass = auto_distribute_approved(
                 samples, STAGING_ROOT,
                 approve=True,
                 journal_path=samples / "FACTORY" / "LibraryManagerReports" / "operations.jsonl",
                 cancel_event=self._cancel_event,
                 progress=report_progress,
             )
+            factory_distribution_result = {
+                **final_factory_pass,
+                "copied_count": incremental_factory["copied_count"] + int(final_factory_pass.get("copied_count", 0)),
+                "incremental_flush_count": incremental_factory["flush_count"],
+                "incremental_results": incremental_factory["results"],
+                "incremental_rejected": incremental_factory["rejected"],
+                "incremental_failed": incremental_factory["failed"],
+            }
             if self._cancel_event.is_set():
                 raise RuntimeError("Полный цикл остановлен во время распределения FACTORY; уже проверенные копии сохранены, исходники не затронуты.")
             finalization_result = factory_distribution_result.get("finalization")
