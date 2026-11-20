@@ -86,7 +86,7 @@ class LibraryManagerApp:
             )
 
     def _build(self) -> None:
-        """Build the six-action Manager dashboard using PPGU NEON STAGE DEFAULT."""
+        """Build the two-action NEON STAGE dashboard for import and full hunting."""
         palette = NEON_STAGE_THEME["palette"]
         bg = palette["window_bg"]
         panel = palette["panel"]
@@ -164,8 +164,8 @@ class LibraryManagerApp:
             foreground=[("disabled", disabled)],
         )
 
-        # Secondary actions remain available, grouped by their matching workflow.
-        # They are intentionally menus rather than extra dashboard buttons.
+        # The workflow is deliberately reduced to two front-door actions.
+        # Secondary operations remain discoverable inside the corresponding menu.
         menu_bar = tk.Menu(
             self.root, tearoff=0, bg=panel, fg=text,
             activebackground=control_face, activeforeground=accent,
@@ -187,38 +187,35 @@ class LibraryManagerApp:
             menu_bar.add_cascade(label=label, menu=submenu)
 
         add_menu("ПРОЕКТ", [
-            ("Выбрать папку Samples…", self.choose_samples),
+            ("Выбрать папку Samples / Import Sample Guitar…", self.choose_samples),
             ("---", None),
             ("Открыть отчёты", self.open_reports),
             ("Открыть staging", self.open_staging),
             ("Инструкция", self.open_user_guide),
         ])
-        add_menu("01  IMPORT GUITAR", [
-            ("Импортировать гитарные материалы", self.import_guitar),
-            ("Браузер подготовленных ассетов для VST3", self.open_plugin_browser),
+        add_menu("IMPORT SAMPLE GUITAR", [
+            ("Добавить выбранные файлы / одну или несколько библиотек…", self.import_guitar),
+            ("Выбрать папку Samples / Import Sample Guitar…", self.choose_samples),
         ])
-        add_menu("02  SCAN LIBRARY", [
-            ("Быстрое сканирование — только файловая инвентаризация", self.quick_scan_only),
-            ("Глубокое сканирование — SHA-256 / SFZ / кэш", self.deep_scan_only),
-        ])
-        add_menu("03  START HUNTING", [
-            ("Запустить полный анализ", self.scan),
+        add_menu("SCAN HUNTING", [
+            ("ЗАПУСТИТЬ ПОЛНЫЙ SCAN HUNTING", self.scan_hunting),
+            ("---", None),
+            ("Быстрый файловый обход (без анализа)", self.quick_scan_only),
+            ("Глубокая инвентаризация / SHA-256 / SFZ (без аудио)", self.deep_scan_only),
             ("Аудит OTHER", self.audit_other),
             ("Направить одобренные материалы в OTHER", self.distribute_other),
-        ])
-        add_menu("04  REVIEW QUEUE", [
-            ("Открыть очередь проверки", self.open_review_queue),
+            ("---", None),
+            ("Открыть REVIEW QUEUE", self.open_review_queue),
             ("Прослушать WAV", self.preview_audio),
             ("Остановить прослушивание", self.stop_preview),
             ("История задач", self.show_task_history),
-        ])
-        add_menu("05  BUILD LIBRARY", [
-            ("Собрать каталог ассетов PPGU", self.build_plugin_catalog),
+            ("---", None),
+            ("Собрать каталог ассетов PPGU / VST3", self.build_plugin_catalog),
+            ("Открыть Sample Browser", self.open_plugin_browser),
             ("Pattern Song Manager", self.open_pattern_song_library),
-            ("12-нотная карта (для AutoChords в PATTERN)", self.open_chromatic_pitch_map),
+            ("12-нотная карта AutoChords", self.open_chromatic_pitch_map),
             ("Распределить одобренные ассеты", self.distribute),
-        ])
-        add_menu("06  VERIFY / RECOVERY", [
+            ("---", None),
             ("Проверить staging и FACTORY", self.finalize_library),
             ("Аудит исходников перед очисткой", self.audit_cleanup),
             ("Очистить исходники (двойное подтверждение)", self.cleanup),
@@ -328,74 +325,88 @@ class LibraryManagerApp:
         section_head = tk.Frame(outer, bg=bg)
         section_head.pack(fill="x", pady=(0, 8))
         tk.Label(
-            section_head, text="ОСНОВНОЙ РАБОЧИЙ ПОТОК",
+            section_head, text="MAIN WORKFLOW",
             bg=bg, fg=text, font=("Segoe UI", 12, "bold"),
         ).pack(side="left")
         tk.Label(
-            section_head, text="6 ОСНОВНЫХ ЭТАПОВ  •  ОРИГИНАЛЫ ЗАЩИЩЕНЫ",
+            section_head, text="2 PRIMARY ACTIONS  •  ALL SOURCE FILES PROTECTED",
             bg=bg, fg=muted, font=("Segoe UI", 8, "bold"),
         ).pack(side="right")
 
         cards = tk.Frame(outer, bg=bg)
         cards.pack(fill="x")
-        for column in range(3):
-            cards.grid_columnconfigure(column, weight=1, uniform="workflow")
+        cards.grid_columnconfigure(0, weight=1, uniform="primary_actions")
+        cards.grid_columnconfigure(1, weight=1, uniform="primary_actions")
 
-        workflow = [
-            ("01", "IMPORT GUITAR",
-             "Импорт файлов и папок в Import Sample Guitar с SHA-256-проверкой копий. Оригиналы остаются нетронутыми.",
-             self.import_guitar, "SOURCE INTAKE"),
-            ("02", "SCAN LIBRARY",
-             "Быстрая инвентаризация структуры, форматов и SFZ-зависимостей. Хеширование и декодирование — только по необходимости.",
-             self.deep_scan_only, "SMART SCAN"),
-            ("03", "START HUNTING",
-             "Поиск нот, паттернов, риффов и музыкальных кандидатов. Сомнительные результаты не получают выдуманных тегов.",
-             self.scan, "AUDIO INTELLIGENCE"),
-            ("04", "REVIEW QUEUE",
-             "Прослушивание оригиналов и производных, проверка границ, нот, артикуляций, категорий библиотеки VST3 и лицензии.",
-             self.open_review_queue, "HUMAN APPROVAL"),
-            ("05", "BUILD LIBRARY",
-             "Сборка каталога подготовленных ассетов и Performance Manifest для отдельного VST3. Неодобренное остаётся в staging.",
-             self.build_plugin_catalog, "LIBRARY CATALOG"),
-            ("06", "VERIFY / RECOVERY",
-             "Целостность WAV и manifests, SHA-256, provenance, лицензии, отчёты и безопасное восстановление.",
-             self.finalize_library, "INTEGRITY / RECOVERY"),
+        workflows = [
+            {
+                "number": "01",
+                "eyebrow": "SOURCE INTAKE  /  SELECTIVE ADD",
+                "title": "IMPORT SAMPLE GUITAR",
+                "description": (
+                    "Выберите отдельные WAV / SFZ / аудиофайлы или одну либо несколько "
+                    "готовых папок гитарных библиотек. Manager создаст проверенные SHA-256 "
+                    "копии внутри Import Sample Guitar. Исходные папки останутся нетронутыми."
+                ),
+                "button": "IMPORT SAMPLE GUITAR",
+                "command": self.import_guitar,
+                "accent": accent,
+                "footer": "SELECT FILES / FOLDERS  •  COPY + VERIFY  •  KEEP ORIGINALS",
+            },
+            {
+                "number": "02",
+                "eyebrow": "FULL LIBRARY PASS  /  AUDIO INTELLIGENCE",
+                "title": "SCAN HUNTING",
+                "description": (
+                    "Полный проход по всей папке Import Sample Guitar: файловая инвентаризация, "
+                    "SHA-256 и SFZ, аудиоанализ, поиск нот / риффов / паттернов, извлечение "
+                    "кандидатов и подготовка отчётов и каталога. Review и лицензия остаются "
+                    "отдельными обязательными проверками."
+                ),
+                "button": "START SCAN HUNTING",
+                "command": self.scan_hunting,
+                "accent": accent_magenta,
+                "footer": "FULL SCAN  •  AUDIO ANALYSIS  •  HUNT CANDIDATES",
+            },
         ]
 
         self._action_buttons = []
-        for index, (number, title, description, command, tag) in enumerate(workflow):
-            row, column = divmod(index, 3)
+        for column, item in enumerate(workflows):
             card = tk.Frame(
                 cards, bg=panel, highlightbackground=border,
-                highlightthickness=1, padx=14, pady=12,
+                highlightthickness=1, padx=18, pady=16,
             )
-            card.grid(row=row, column=column, sticky="nsew", padx=5, pady=5)
-            tk.Frame(card, bg=(accent, accent_purple, accent_magenta)[index % 3], height=3).pack(fill="x", pady=(0, 10))
-            top = tk.Frame(card, bg=panel)
-            top.pack(fill="x")
+            card.grid(row=0, column=column, sticky="nsew", padx=(0, 7) if column == 0 else (7, 0), pady=5)
+            tk.Frame(card, bg=item["accent"], height=4).pack(fill="x", pady=(0, 12))
+            title_row = tk.Frame(card, bg=panel)
+            title_row.pack(fill="x")
             tk.Label(
-                top, text=number, bg=panel, fg=accent,
-                font=("Consolas", 17, "bold"),
+                title_row, text=item["number"], bg=panel, fg=item["accent"],
+                font=("Consolas", 24, "bold"),
             ).pack(side="left")
             tk.Label(
-                top, text=tag, bg=panel, fg=muted,
-                font=("Segoe UI", 7, "bold"),
-            ).pack(side="right")
+                title_row, text=item["eyebrow"], bg=panel, fg=muted,
+                font=("Segoe UI", 8, "bold"),
+            ).pack(side="right", anchor="center")
             tk.Label(
-                card, text=title, bg=panel, fg=text,
-                font=("Segoe UI", 10, "bold"), anchor="w",
-            ).pack(fill="x", pady=(4, 5))
+                card, text=item["title"], bg=panel, fg=text,
+                font=("Segoe UI", 16, "bold"), anchor="w",
+            ).pack(fill="x", pady=(10, 8))
             tk.Label(
-                card, text=description, bg=panel, fg=muted,
-                font=("Segoe UI", 8), justify="left", anchor="nw",
-                wraplength=330, height=3,
-            ).pack(fill="both", expand=True, pady=(0, 10))
+                card, text=item["description"], bg=panel, fg=muted,
+                font=("Segoe UI", 9), justify="left", anchor="nw",
+                wraplength=470, height=5,
+            ).pack(fill="both", expand=True, pady=(0, 12))
             button = ttk.Button(
-                card, text="ОТКРЫТЬ ЭТАП",
-                command=command, style="PPGU.Primary.TButton",
+                card, text=item["button"], command=item["command"],
+                style="PPGU.Primary.TButton",
             )
-            button.pack(fill="x")
+            button.pack(fill="x", ipady=8)
             self._action_buttons.append(button)
+            tk.Label(
+                card, text=item["footer"], bg=panel, fg=item["accent"],
+                font=("Consolas", 7, "bold"), anchor="w",
+            ).pack(fill="x", pady=(10, 0))
 
         # Persistent activity console: the only always-visible secondary surface.
         log_panel = tk.Frame(
@@ -453,7 +464,8 @@ class LibraryManagerApp:
 
         self._write(
             "NEON STAGE DEFAULT / SKIN-1 загружена из темы PPGU.\n"
-            "На главном экране — шесть рабочих этапов; вспомогательные инструменты находятся в меню своих разделов.\n"
+            "Главный экран содержит две операции: выборочное добавление и полный SCAN HUNTING.\n"
+            "Дополнительные проверки и инструменты находятся в меню SCAN HUNTING.\n"
             "Оригиналы read-only. В FACTORY допускаются только REVIEWED + LICENSE_APPROVED + VERIFIED материалы.\n"
         )
 
@@ -863,6 +875,12 @@ class LibraryManagerApp:
         self._write("На первом проходе SHA-256 читает аудиофайлы; последующие проходы используют кэш неизменённых файлов.")
         self._background("Быстрый глубокий анализ", work)
 
+    def scan_hunting(self) -> None:
+        """Run the complete scan, analysis, extraction and catalogue preparation flow."""
+        self._write("=== SCAN HUNTING: ПОЛНЫЙ ПРОХОД Import Sample Guitar ===")
+        self._write("Запускаются все рабочие этапы существующего полного конвейера. Быстрый и глубокий scan, аудиоанализ, поиск и извлечение выполняются одной последовательностью.")
+        self.scan()
+
     def scan(self) -> None:
         """Run the complete preparation pipeline after the fast scan."""
         try:
@@ -1135,7 +1153,7 @@ class LibraryManagerApp:
         self._write("Извлечение запускается только после ручного подтверждения гитарного источника. FACTORY остаётся защищённой review/license gate.")
         self._write(f"Акустический анализ: {'ВКЛЮЧЁН' if analyze_audio else 'ВЫКЛЮЧЕН'}")
         self._write(f"Гитарный источник подтверждён: {'ДА' if guitar_confirmed else 'НЕТ'}")
-        self._background("Полный цикл подготовки библиотеки", work)
+        self._background("SCAN HUNTING — полный проход и анализ Import Sample Guitar", work)
 
     def _progress(self, message: str) -> None:
         self._write("[ВЫПОЛНЯЕТСЯ] " + message)
