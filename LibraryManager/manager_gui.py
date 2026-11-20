@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import threading
 import traceback
 import tkinter as tk
@@ -19,7 +20,7 @@ from app_paths import resolve_runtime_paths, resource_file
 from unified_manager import AUDIO_EXT, run_manager, quick_scan, resolve_samples_root
 from source_import import import_sources_to_library
 from pattern_clip_extractor import extract_pattern_occurrences
-from other_audit import audit_other_library, route_approved_to_other
+from other_audit import audit_other_library, route_approved_to_other, copy_unsupported_to_other
 from cleanup_audit import audit_all_import_sources, cleanup_sources_from_audit
 from finalization import finalize_library as finalize_library_audit
 from manifest_review import review_manifest
@@ -70,6 +71,8 @@ class LibraryManagerApp:
         self._task_journal = TaskJournal(MANAGER_DIR / 'reports' / 'task_history.jsonl')
         self._active_task_id = None
         self._active_task_title = None
+        self._progress_stage = 0
+        self._progress_stage_total = 0
         self._build()
         self.root.after(100, self._poll_worker_events)
         if not self.samples_root.get().strip():
@@ -136,6 +139,12 @@ class LibraryManagerApp:
             background=[("disabled", control_face), ("pressed", accent_glow), ("active", accent_glow)],
             foreground=[("disabled", disabled)],
             bordercolor=[("active", accent_glow)],
+        )
+        style.configure(
+            "PPGU.Neon.Horizontal.TProgressbar",
+            troughcolor=control_bg, background=accent_glow,
+            bordercolor=border, lightcolor=accent_glow,
+            darkcolor=accent, thickness=12,
         )
         style.configure(
             "PPGU.Danger.TButton",
@@ -408,6 +417,37 @@ class LibraryManagerApp:
                 font=("Consolas", 7, "bold"), anchor="w",
             ).pack(fill="x", pady=(10, 0))
 
+        # Live operation monitor: worker-thread progress is rendered on the Tk main thread.
+        progress_panel = tk.Frame(
+            outer, bg=panel, highlightbackground=border,
+            highlightthickness=1, padx=12, pady=9,
+        )
+        progress_panel.pack(fill="x", pady=(10, 0))
+        progress_header = tk.Frame(progress_panel, bg=panel)
+        progress_header.pack(fill="x")
+        self._progress_title = tk.StringVar(value="SYSTEM READY  /  ОЖИДАНИЕ")
+        self._progress_detail = tk.StringVar(
+            value="Выберите IMPORT SAMPLE GUITAR или SCAN HUNTING."
+        )
+        tk.Label(
+            progress_header, text="LIVE PROCESS MONITOR",
+            bg=panel, fg=accent_glow, font=("Segoe UI", 8, "bold"),
+        ).pack(side="left")
+        tk.Label(
+            progress_header, textvariable=self._progress_title,
+            bg=panel, fg=text, font=("Consolas", 8, "bold"),
+        ).pack(side="right")
+        self._progress_bar = ttk.Progressbar(
+            progress_panel, mode="indeterminate", maximum=100,
+            style="PPGU.Neon.Horizontal.TProgressbar",
+        )
+        self._progress_bar.pack(fill="x", pady=(7, 5))
+        tk.Label(
+            progress_panel, textvariable=self._progress_detail,
+            bg=panel, fg=muted, font=("Consolas", 8), anchor="w",
+            justify="left",
+        ).pack(fill="x")
+
         # Persistent activity console: the only always-visible secondary surface.
         log_panel = tk.Frame(
             outer, bg=lcd_bg, highlightbackground=border,
@@ -609,6 +649,12 @@ class LibraryManagerApp:
 
         self._job_running = True
         self._cancel_event.clear()
+        self._progress_stage = 0
+        self._progress_stage_total = 0
+        self._progress_title.set("RUNNING  /  " + title.upper())
+        self._progress_detail.set("Запуск рабочего процесса…")
+        self._progress_bar.configure(mode="indeterminate", value=0)
+        self._progress_bar.start(12)
         self._active_task_title = title
         task_id = self._task_journal.start(
             title, details={"samples_root": self.samples_root.get(), "manager_version": APP_VERSION}
@@ -670,6 +716,9 @@ class LibraryManagerApp:
                     _, title, result = event
                     self._job_running = False
                     self._worker_thread = None
+                    self._progress_bar.stop()
+                    self._progress_bar.configure(mode="determinate", value=100)
+                    self._progress_title.set("COMPLETE  /  ЗАВЕРШЕНО")
                     self._cancel_button.configure(state="disabled")
                     for button in self._action_buttons:
                         button.configure(state="normal")
@@ -678,6 +727,9 @@ class LibraryManagerApp:
                     _, title, result = event
                     self._job_running = False
                     self._worker_thread = None
+                    self._progress_bar.stop()
+                    self._progress_title.set("CANCELLED  /  ОСТАНОВЛЕНО")
+                    self._progress_detail.set("Безопасная остановка. Исходники сохранены; частичные отчёты оставлены.")
                     self._cancel_button.configure(state="disabled")
                     for button in self._action_buttons:
                         button.configure(state="normal")
@@ -687,6 +739,9 @@ class LibraryManagerApp:
                     _, title, error_text, details = event
                     self._job_running = False
                     self._worker_thread = None
+                    self._progress_bar.stop()
+                    self._progress_title.set("ERROR  /  ОШИБКА")
+                    self._progress_detail.set(error_text)
                     self._cancel_button.configure(state="disabled")
                     for button in self._action_buttons:
                         button.configure(state="normal")
@@ -1156,13 +1211,49 @@ class LibraryManagerApp:
         self._background("SCAN HUNTING — полный проход и анализ Import Sample Guitar", work)
 
     def _progress(self, message: str) -> None:
+        """Render bounded live status/progress updates on Tk's main thread."""
         self._write("[ВЫПОЛНЯЕТСЯ] " + message)
         if self._active_task_id:
             try:
                 self._task_journal.progress(self._active_task_id, self._active_task_title or "Background task", message)
             except OSError as exc:
                 self._write(f"[ПРЕДУПРЕЖДЕНИЕ] Не удалось записать историю: {exc}")
+
         self.status.set(message)
+        self._progress_title.set("RUNNING  /  " + (self._active_task_title or "SCAN HUNTING").upper())
+        self._progress_detail.set(message)
+
+        stage = re.search(r"(?:ЭТАП|STAGE)\s*(\d+)\s*/\s*(\d+)", message, re.IGNORECASE)
+        if stage:
+            self._progress_stage = int(stage.group(1))
+            self._progress_stage_total = max(1, int(stage.group(2)))
+            self._progress_bar.stop()
+            self._progress_bar.configure(mode="determinate")
+            self._progress_bar["value"] = 100.0 * self._progress_stage / self._progress_stage_total
+            self._progress_detail.set(
+                f"Этап {self._progress_stage}/{self._progress_stage_total}  •  {message}"
+            )
+            return
+
+        ratio = re.search(
+            r"(?:Обработка|проверено манифестов|проверено неподдерживаемых файлов|"
+            r"обработано|проверено файлов|быстрый обход)[^0-9]*(\d[\d, ]*)\s*/\s*(\d[\d, ]*)",
+            message, re.IGNORECASE,
+        )
+        if ratio:
+            done = int(re.sub(r"\D", "", ratio.group(1)) or "0")
+            total = max(1, int(re.sub(r"\D", "", ratio.group(2)) or "1"))
+            fraction = max(0.0, min(1.0, done / total))
+            overall = (
+                ((self._progress_stage - 1 + fraction) / self._progress_stage_total) * 100.0
+                if self._progress_stage_total else fraction * 100.0
+            )
+            self._progress_bar.stop()
+            self._progress_bar.configure(mode="determinate")
+            self._progress_bar["value"] = overall
+            self._progress_detail.set(
+                f"Обработано {done:,} / {total:,}  •  {fraction:.0%} текущего этапа  •  {message}"
+            )
 
     def show_task_history(self) -> None:
         """Display last known task states from the durable journal."""
