@@ -121,6 +121,13 @@ def _pattern_readiness(metadata: dict[str, Any], frame_count: int | None = None)
         missing.append("cycle_integrity_verified")
     if pattern.get("musical_review_verified") is not True:
         missing.append("musical_review_verified")
+    selector_key = pattern.get("confirmed_pattern_selector_key") or metadata.get("confirmed_pattern_selector_key")
+    selector_name = pattern.get("confirmed_pattern_name") or metadata.get("confirmed_pattern_name")
+    selector_map = dict(PATTERN_SELECTOR_LAYOUT)
+    if selector_key not in selector_map:
+        missing.append("confirmed_pattern_selector_key")
+    elif selector_name != selector_map[selector_key]:
+        missing.append("confirmed_pattern_name_matching_selector_key")
     return ("STRUCTURE_VERIFIED" if not missing else "INCOMPLETE"), missing
 
 
@@ -352,6 +359,9 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
         velocity = _velocity_record(asset, metadata) if approved_evidence else {
             "status": "UNKNOWN", "min": None, "max": None, "layer": "UNKNOWN"
         }
+        pattern_metadata = metadata.get("pattern_performance_review") or metadata.get("pattern") or {}
+        if not isinstance(pattern_metadata, dict):
+            pattern_metadata = {}
         state, missing = _pattern_readiness(metadata, asset.get("frame_count"))
         if asset.get("review_status") != "REVIEWED":
             missing.append("explicit_musical_review")
@@ -375,8 +385,9 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
             "confirmed_pitches": pitches,
             "reviewed_techniques": techniques,
             "velocity_zone": velocity,
-            "metadata": metadata.get("pattern_performance_review") or metadata.get("pattern") or {},
-            "selector_key": metadata.get("confirmed_pattern_selector_key"),
+            "metadata": pattern_metadata,
+            "selector_key": pattern_metadata.get("confirmed_pattern_selector_key")
+                or metadata.get("confirmed_pattern_selector_key"),
         })
         global_assets.setdefault(asset_id, {
             "asset_id": asset_id, "asset_file": asset.get("asset_file"),
@@ -442,6 +453,7 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
             ],
             "note_zones": pattern_records,
             "performances": pattern_performance_records,
+            "assets": pattern_records,
         },
         "melody_mode": {
             "asset_count": len(melody_records),
@@ -459,7 +471,10 @@ def build_library_structure(catalog: dict[str, Any], *, catalog_path: str | Path
                                           if sum(asset_id in {x["asset_id"] for x in row["assets"]} for row in mode_rows)
                                           + sum(1 for x in pattern_performance_records if x["asset_id"] == asset_id) > 1),
             "runtime_ready_assignment_count": sum(item["runtime_ready_count"] for item in mode_rows),
-            "pattern_structure_verified_count": sum(x["pattern_structure_status"] == "STRUCTURE_VERIFIED" for x in pattern_records),
+            "pattern_structure_verified_count": (
+                sum(x["pattern_structure_status"] == "STRUCTURE_VERIFIED" for x in pattern_records)
+                + sum(x["pattern_structure_status"] == "STRUCTURE_VERIFIED" for x in pattern_performance_records)
+            ),
             "melody_structure_verified_count": sum(x["melody_structure_status"] == "STRUCTURE_VERIFIED" for x in melody_records),
         },
     }
@@ -488,6 +503,28 @@ def validate_library_structure(structure: dict[str, Any]) -> list[str]:
                 or mode["mode"] not in (asset.get("playable_modes") or [])
             ):
                 errors.append(f"Runtime-ready assignment violates approval/integrity gate: {key}")
+
+    pattern_performances = structure.get("pattern_mode", {}).get("performances", [])
+    seen_pattern_performances = set()
+    allowed_selector_keys = set(dict(PATTERN_SELECTOR_LAYOUT))
+    for performance in pattern_performances:
+        asset_id = performance.get("asset_id")
+        if not asset_id or asset_id in seen_pattern_performances:
+            errors.append(f"Missing or duplicate Pattern Instrument performance: {asset_id}")
+        seen_pattern_performances.add(asset_id)
+        selector_key = performance.get("selector_key")
+        if selector_key is not None and selector_key not in allowed_selector_keys:
+            errors.append(f"Unknown Pattern selector key {selector_key!r}: {asset_id}")
+        if performance.get("pattern_structure_status") == "STRUCTURE_VERIFIED" and (
+            performance.get("review_status") != "REVIEWED"
+            or performance.get("license_status") != "LICENSE_APPROVED"
+            or performance.get("integrity_status") != "VERIFIED"
+            or not performance.get("asset_file")
+            or selector_key not in allowed_selector_keys
+        ):
+            errors.append(
+                f"Pattern performance ready state violates selector/review/license/integrity gate: {asset_id}"
+            )
     return errors
 
 
