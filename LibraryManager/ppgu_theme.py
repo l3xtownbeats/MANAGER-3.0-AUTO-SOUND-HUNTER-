@@ -26,29 +26,29 @@ PALETTE_KEYS = (
 
 # Approved 23-token NEON STAGE fallback, aligned to the reference mockups.
 _FALLBACK_PALETTE = {
-    "window_bg": "#000612",
-    "panel": "#010B1C",
-    "panel_elevated": "#06152E",
-    "control_bg": "#000A1E",
-    "control_face": "#06112A",
-    "control_border": "#0B4E9C",
-    "text_primary": "#F3F7FF",
-    "text_secondary": "#B9CBE0",
-    "text_disabled": "#788BA4",
-    "accent": "#075CE8",
-    "accent_glow": "#00BFFF",
-    "accent_purple": "#7115B8",
-    "accent_magenta": "#E51BD4",
+    "window_bg": "#0b0b0d",
+    "panel": "#121216",
+    "panel_elevated": "#191920",
+    "control_bg": "#0f0f11",
+    "control_face": "#1a1a1f",
+    "control_border": "#49304f",
+    "text_primary": "#e0e0e0",
+    "text_secondary": "#b7aebc",
+    "text_disabled": "#77717c",
+    "accent": "#b300ff",
+    "accent_glow": "#d45cff",
+    "accent_purple": "#8d16c5",
+    "accent_magenta": "#e044ff",
     "danger": "#FF5577",
     "warning": "#FFC857",
     "success": "#57E879",
-    "lcd_bg": "#02091E",
-    "lcd_text": "#8CEAFF",
-    "led_on": "#00C8FF",
-    "led_off": "#18345A",
-    "shadow": "#00020A",
-    "highlight": "#3E9CFF",
-    "lowlight": "#000612"
+    "lcd_bg": "#09090c",
+    "lcd_text": "#efcaff",
+    "led_on": "#d45cff",
+    "led_off": "#38223f",
+    "shadow": "#050407",
+    "highlight": "#c36be8",
+    "lowlight": "#0b0b0d"
 }
 
 
@@ -135,6 +135,23 @@ def configure_neon_stage_ttk(style: Any, palette: dict[str, str] | None = None) 
         font=("Segoe UI", 9),
     )
     style.configure(
+        "TLabelframe", background=panel, bordercolor=border,
+        relief="solid", padding=6,
+    )
+    style.configure(
+        "TLabelframe.Label", background=panel, foreground=glow,
+        font=("Segoe UI", 8, "bold"),
+    )
+    style.configure(
+        "TCheckbutton", background=panel, foreground=text,
+        font=("Segoe UI", 9), padding=(4, 4),
+    )
+    style.map(
+        "TCheckbutton",
+        background=[("active", panel)],
+        foreground=[("disabled", disabled), ("active", glow)],
+    )
+    style.configure(
         "TButton", background=control_face, foreground=text,
         bordercolor=border, lightcolor=border, darkcolor=border,
         padding=(10, 6), font=("Segoe UI", 9, "bold"), relief="flat",
@@ -188,6 +205,43 @@ def configure_neon_stage_ttk(style: Any, palette: dict[str, str] | None = None) 
         darkcolor=border,
     )
     style.configure("TSeparator", background=border)
+    style.configure(
+        "PPGU.DialogPrimary.TButton",
+        background=accent, foreground="#FFFFFF",
+        bordercolor=accent, lightcolor=accent, darkcolor=accent,
+        padding=(16, 8), font=("Segoe UI", 9, "bold"), relief="flat",
+    )
+    style.map(
+        "PPGU.DialogPrimary.TButton",
+        background=[("disabled", control_bg), ("pressed", glow), ("active", glow)],
+        foreground=[("disabled", disabled), ("pressed", "#FFFFFF"), ("active", "#FFFFFF")],
+        bordercolor=[("active", glow), ("focus", glow)],
+    )
+    style.configure(
+        "PPGU.DialogSecondary.TButton",
+        background=panel_alt, foreground=text,
+        bordercolor=border, lightcolor=border, darkcolor=border,
+        padding=(14, 8), font=("Segoe UI", 8, "bold"), relief="flat",
+    )
+    style.map(
+        "PPGU.DialogSecondary.TButton",
+        background=[("disabled", control_bg), ("pressed", control_face), ("active", control_face)],
+        foreground=[("disabled", disabled), ("active", glow)],
+        bordercolor=[("active", glow), ("focus", glow)],
+    )
+    style.configure(
+        "PPGU.DialogDanger.TButton",
+        background=colors["danger"], foreground="#FFFFFF",
+        bordercolor=colors["danger"], lightcolor=colors["danger"],
+        darkcolor=panel, padding=(12, 7),
+        font=("Segoe UI", 8, "bold"), relief="flat",
+    )
+    style.map(
+        "PPGU.DialogDanger.TButton",
+        background=[("disabled", control_bg), ("pressed", colors["warning"]), ("active", colors["danger"])],
+        foreground=[("disabled", disabled), ("pressed", panel), ("active", "#FFFFFF")],
+        bordercolor=[("active", colors["warning"]), ("focus", colors["warning"])],
+    )
 
 
 NEON_STAGE_THEME = load_neon_stage_theme()

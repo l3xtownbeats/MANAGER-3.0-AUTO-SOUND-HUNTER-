@@ -9,7 +9,7 @@ import unittest
 import wave
 from pathlib import Path
 
-from other_audit import audit_other_library, route_approved_to_other
+from other_audit import audit_other_library, route_approved_to_other, copy_unsupported_to_other
 
 
 def make_wav(path: Path) -> None:
@@ -71,6 +71,73 @@ class OtherAuditTests(unittest.TestCase):
             self.assertEqual(destination.read_bytes(), source.read_bytes())
             self.assertTrue(destination.with_suffix(".xyz.json").is_file())
             self.assertTrue(source.exists())
+
+    def test_unsupported_files_are_copied_to_other_verified_and_idempotently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Samples"
+            incoming = root / "Import Sample Guitar"
+            incoming.mkdir(parents=True)
+            (incoming / "Docs").mkdir()
+            unsupported = incoming / "Docs" / "readme.xyz"
+            unsupported.write_text("not an importable sound", encoding="utf-8")
+            wav = incoming / "guitar.wav"
+            make_wav(wav)
+
+            first = copy_unsupported_to_other(root)
+            destination = root / "OTHER" / "Docs" / "readme.xyz"
+            sidecar = destination.with_suffix(".xyz.json")
+            self.assertEqual(first["copied_count"], 1)
+            self.assertTrue(destination.is_file())
+            self.assertTrue(sidecar.is_file())
+            self.assertEqual(destination.read_bytes(), unsupported.read_bytes())
+            record = json.loads(sidecar.read_text(encoding="utf-8"))
+            self.assertEqual(record["distribution_status"], "VERIFIED_COPIED_TO_OTHER")
+            self.assertEqual(record["route_reason"], "UNSUPPORTED_FILE_TYPE")
+            self.assertTrue(record["source_preserved"])
+            self.assertTrue(unsupported.is_file())
+            self.assertFalse((root / "OTHER" / "guitar.wav").exists())
+
+            second = copy_unsupported_to_other(root)
+            self.assertEqual(second["copied_count"], 0)
+            self.assertEqual(second["already_present_count"], 1)
+            self.assertTrue(unsupported.is_file())
+
+    def test_unsupported_copy_refuses_conflicting_other_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Samples"
+            incoming = root / "Import Sample Guitar"
+            incoming.mkdir(parents=True)
+            source = incoming / "readme.xyz"
+            source.write_text("source", encoding="utf-8")
+            destination = root / "OTHER" / "readme.xyz"
+            destination.parent.mkdir(parents=True)
+            destination.write_text("do not overwrite", encoding="utf-8")
+
+            result = copy_unsupported_to_other(root)
+            self.assertEqual(result["copied_count"], 0)
+            self.assertEqual(result["error_count"], 1)
+            self.assertEqual(destination.read_text(encoding="utf-8"), "do not overwrite")
+            self.assertTrue(source.is_file())
+
+    def test_library_metadata_and_manager_virtual_sidecars_are_not_routed_to_other(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Samples"
+            incoming = root / "Import Sample Guitar"
+            incoming.mkdir(parents=True)
+            (incoming / "LICENSE.txt").write_text("Redistribution terms", encoding="utf-8")
+            (incoming / "bank.json").write_text('{"libraryId":"test"}', encoding="utf-8")
+            virtual = incoming / "virtual_candidates"
+            virtual.mkdir()
+            (virtual / "candidate-001.json").write_text('{"manager":"sidecar"}', encoding="utf-8")
+
+            result = copy_unsupported_to_other(root)
+            self.assertEqual(result["copied_count"], 0)
+            self.assertEqual(result["candidates_seen"], 0)
+            self.assertTrue((incoming / "LICENSE.txt").is_file())
+            self.assertTrue((incoming / "bank.json").is_file())
+            self.assertTrue((virtual / "candidate-001.json").is_file())
+            self.assertFalse((root / "OTHER" / "LICENSE.txt").exists())
+            self.assertFalse((root / "OTHER" / "bank.json").exists())
 
 
 if __name__ == "__main__":

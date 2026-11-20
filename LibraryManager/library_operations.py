@@ -279,8 +279,10 @@ def auto_distribute_approved(
     journal_path: Path | None = None,
     cancel_event: Any = None,
     progress=None,
+    manifest_paths: list[Path] | None = None,
+    finalize: bool = True,
 ) -> dict[str, Any]:
-    """Process every staging manifest independently; bad assets never block later ones.
+    """Process staging manifests independently; bad assets never block later ones.
 
     Only manifests that pass the existing musical-review, license, provenance,
     PCM, bounds and SHA-256 gates are copied. Each asset is its own transaction:
@@ -291,11 +293,16 @@ def auto_distribute_approved(
     samples = Path(samples_root).resolve()
     staging = Path(staging_root).resolve()
     manifests_dir = staging / "manifests"
-    manifests = sorted(manifests_dir.glob("*.json")) if manifests_dir.is_dir() else []
+    manifests = (
+        sorted(Path(path) for path in manifest_paths)
+        if manifest_paths is not None
+        else (sorted(manifests_dir.glob("*.json")) if manifests_dir.is_dir() else [])
+    )
     journal = journal_path or (
         samples / "FACTORY" / "LibraryManagerReports" / "operations.jsonl"
     )
     ready: list[tuple[Path, dict[str, Any]]] = []
+    already_present: list[dict[str, str]] = []
     rejected: list[dict[str, str]] = []
     for index, manifest in enumerate(manifests, 1):
         if cancel_event is not None and cancel_event.is_set():
@@ -303,6 +310,8 @@ def auto_distribute_approved(
                 "status": "CANCELLED_DURING_PREFLIGHT",
                 "manifests_seen": index - 1,
                 "ready_count": len(ready),
+                "already_present_count": len(already_present),
+                "already_present": already_present,
                 "copied_count": 0,
                 "rejected": rejected,
                 "results": [],
@@ -312,20 +321,49 @@ def auto_distribute_approved(
             plan = distribution_plan([manifest], samples, staging)
             if len(plan.get("entries", [])) != 1:
                 raise ValueError("Manifest did not produce exactly one eligible FACTORY asset")
-            ready.append((manifest, plan))
+            entry = plan["entries"][0]
+            destination = Path(entry["destination_path"]).resolve()
+            sidecar = destination.with_suffix(destination.suffix + ".json")
+            if destination.exists() or sidecar.exists():
+                verified_existing = False
+                if destination.is_file() and sidecar.is_file():
+                    prior = json.loads(sidecar.read_text(encoding="utf-8"))
+                    expected_hash = str(entry["source_sha256"]).upper()
+                    verified_existing = (
+                        sha256_file(destination) == expected_hash
+                        and str(prior.get("distributed_sha256", "")).upper() == expected_hash
+                        and str(prior.get("distribution_status", "")) == "VERIFIED_COPIED"
+                        and Path(prior.get("distributed_path", "")).resolve() == destination
+                        and str(prior.get("review_status", "")) in APPROVED_REVIEW_STATES
+                        and str(prior.get("license_status", "")) == "LICENSE_APPROVED"
+                    )
+                if not verified_existing:
+                    raise FileExistsError(
+                        f"FACTORY destination already exists but cannot be verified: {destination}"
+                    )
+                already_present.append({
+                    "manifest_path": str(manifest),
+                    "destination_path": str(destination),
+                    "sha256": str(entry["source_sha256"]).upper(),
+                    "status": "ALREADY_PRESENT_VERIFIED",
+                })
+            else:
+                ready.append((manifest, plan))
         except Exception as exc:
             rejected.append({
                 "manifest_path": str(manifest),
                 "error": f"{type(exc).__name__}: {exc}",
             })
         if progress and (index == 1 or index % 25 == 0 or index == len(manifests)):
-            progress(f"Автораспределение: проверено манифестов {index}/{len(manifests)}; готово {len(ready)}; пропущено {len(rejected)}.")
+            progress(f"Автораспределение: проверено манифестов {index}/{len(manifests)}; готово {len(ready)}; уже в FACTORY {len(already_present)}; отклонено {len(rejected)}.")
 
     if not approve:
         return {
             "status": "DRY_RUN",
             "manifests_seen": len(manifests),
             "ready_count": len(ready),
+            "already_present_count": len(already_present),
+            "already_present": already_present,
             "copied_count": 0,
             "rejected": rejected,
             "ready_manifest_paths": [str(path) for path, _ in ready],
@@ -362,7 +400,7 @@ def auto_distribute_approved(
 
     finalization = None
     finalization_error = None
-    if not cancelled:
+    if not cancelled and finalize:
         try:
             from finalization import finalize_library
             finalization = finalize_library(
@@ -383,6 +421,8 @@ def auto_distribute_approved(
         "status": status,
         "manifests_seen": len(manifests),
         "ready_count": len(ready),
+        "already_present_count": len(already_present),
+        "already_present": already_present,
         "copied_count": len(results),
         "rejected": rejected,
         "failed": failed,

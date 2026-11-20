@@ -262,26 +262,47 @@ def tap_intervals(tap_times_seconds: list[float]) -> list[float]:
     return [b - a for a, b in zip(times, times[1:])]
 
 
-def open_pattern_song_manager(parent, library_path: Path) -> None:
+def open_pattern_song_manager(parent, library_path: Path, *, dialogs=None) -> None:
     """Open a small Tk editor for Songs/Patterns metadata; never edits source WAVs."""
     import tkinter as tk
     import time
     from tkinter import filedialog, messagebox, simpledialog, ttk
 
+    showerror = dialogs.showerror if dialogs is not None else messagebox.showerror
+    showinfo = dialogs.showinfo if dialogs is not None else messagebox.showinfo
+    askyesno = dialogs.askyesno if dialogs is not None else messagebox.askyesno
+    askstring = dialogs.askstring if dialogs is not None else simpledialog.askstring
+
     path = Path(library_path)
     try:
         library = load_library(path)
     except Exception as exc:
-        messagebox.showerror("Pattern Song Manager", str(exc), parent=parent)
+        showerror("Pattern Song Manager", str(exc), parent=parent)
         return
 
-    window = tk.Toplevel(parent)
-    window.title("PPGU — Pattern Song Manager")
-    window.geometry("980x620")
-    window.transient(parent)
-
-    top = ttk.Frame(window, padding=10)
-    top.pack(fill="both", expand=True)
+    if dialogs is not None:
+        window, window_content, window_footer = dialogs.create_window(
+            "PATTERN SONG MANAGER",
+            "PATTERN LIBRARY  •  SONG GROUPS / KEY SWITCH / RHYTHM SEARCH",
+            "980x620",
+        )
+        top = ttk.Frame(window_content, padding=10)
+        top.pack(fill="both", expand=True)
+        ttk.Label(
+            window_footer,
+            text="METADATA ONLY  /  SOURCE WAV FILES ARE NEVER MODIFIED",
+        ).pack(side="left")
+        ttk.Button(
+            window_footer, text="ЗАКРЫТЬ",
+            style="PPGU.DialogSecondary.TButton", command=window.destroy,
+        ).pack(side="right")
+    else:
+        window = tk.Toplevel(parent)
+        window.title("PPGU — Pattern Song Manager")
+        window.geometry("980x620")
+        window.transient(parent)
+        top = ttk.Frame(window, padding=10)
+        top.pack(fill="both", expand=True)
     ttk.Label(top, text="PATTERN SONGS — группы паттернов по песням", font=("Segoe UI", 14, "bold")).pack(anchor="w")
     ttk.Label(top, text="Без time-stretch • Shift / End • Key Switch • Rhythm Search • Chord adaptation • Natural Doubling").pack(anchor="w", pady=(0, 8))
 
@@ -359,22 +380,22 @@ def open_pattern_song_manager(parent, library_path: Path) -> None:
     tree.bind("<<TreeviewSelect>>", select_item)
 
     def add_song():
-        name = simpledialog.askstring("Новая Song", "Название группы паттернов:", parent=window)
+        name = askstring("Новая Song", "Название группы паттернов:", parent=window)
         if not name:
             return
-        style = simpledialog.askstring("Стиль", "Стиль/направление (необязательно):", parent=window) or ""
+        style = askstring("Стиль", "Стиль/направление (необязательно):", parent=window) or ""
         library["songs"].append(create_song(name, style=style))
         refresh()
 
     def add_pattern_ui():
         song = selected.get("song")
         if song is None:
-            messagebox.showinfo("Выбор Song", "Сначала выберите Song в дереве.", parent=window)
+            showinfo("Выбор Song", "Сначала выберите Song в дереве.", parent=window)
             return
         wav = filedialog.askopenfilename(parent=window, title="Выберите извлечённый Pattern WAV", filetypes=[("WAV", "*.wav")])
         if not wav:
             return
-        name = simpledialog.askstring("Название Pattern", "Например: Verse 8ths / Chorus Accents:", parent=window)
+        name = askstring("Название Pattern", "Например: Verse 8ths / Chorus Accents:", parent=window)
         if not name:
             return
         try:
@@ -384,12 +405,12 @@ def open_pattern_song_manager(parent, library_path: Path) -> None:
             tree.focus(pattern["pattern_id"])
             select_item()
         except Exception as exc:
-            messagebox.showerror("Pattern", str(exc), parent=window)
+            showerror("Pattern", str(exc), parent=window)
 
     def save_selected():
         pattern, song = selected.get("pattern"), selected.get("song")
         if pattern is None or song is None:
-            messagebox.showinfo("Выбор Pattern", "Выберите паттерн, чтобы сохранить его параметры.", parent=window)
+            showinfo("Выбор Pattern", "Выберите паттерн, чтобы сохранить его параметры.", parent=window)
             return
         try:
             role = fields["role"].get().strip().upper()
@@ -418,9 +439,9 @@ def open_pattern_song_manager(parent, library_path: Path) -> None:
             validate_library(library)
             save_library(path, library)
             refresh()
-            messagebox.showinfo("Pattern", "Параметры сохранены. Runtime-ready остаётся закрыт до проверки событий и лицензии.", parent=window)
+            showinfo("Pattern", "Параметры сохранены. Runtime-ready остаётся закрыт до проверки событий и лицензии.", parent=window)
         except Exception as exc:
-            messagebox.showerror("Ошибка проверки", str(exc), parent=window)
+            showerror("Ошибка проверки", str(exc), parent=window)
 
     tap_state = {"times": []}
     tap_button = {"widget": None}
@@ -446,18 +467,18 @@ def open_pattern_song_manager(parent, library_path: Path) -> None:
             values = [float(x.strip()) / 1000.0 for x in fields["rhythm"].get().split(",") if x.strip()]
             results = search_similar_patterns(library, values)
             if not results:
-                messagebox.showinfo("Rhythm Search", "Совпадений нет. Добавьте rhythm signature проверенным паттернам.", parent=window)
+                showinfo("Rhythm Search", "Совпадений нет. Добавьте rhythm signature проверенным паттернам.", parent=window)
                 return
             lines = [f'{item["song_name"]} — {item["pattern_name"]} [{item["role"]}] | distance={item["distance"]:.3f}' for item in results]
-            messagebox.showinfo("Rhythm Search", "\\n".join(lines), parent=window)
+            showinfo("Rhythm Search", "\n".join(lines), parent=window)
         except Exception as exc:
-            messagebox.showerror("Rhythm Search", str(exc), parent=window)
+            showerror("Rhythm Search", str(exc), parent=window)
 
     def delete_selected():
         pattern, song = selected.get("pattern"), selected.get("song")
         if pattern is None or song is None:
             return
-        if not messagebox.askyesno("Удалить запись", "Удалить только запись паттерна из Song? WAV-файл не удаляется.", parent=window):
+        if not askyesno("Удалить запись", "Удалить только запись паттерна из Song? WAV-файл не удаляется.", parent=window):
             return
         song["patterns"] = [p for p in song["patterns"] if p["pattern_id"] != pattern["pattern_id"]]
         selected.update(pattern=None)
@@ -466,13 +487,13 @@ def open_pattern_song_manager(parent, library_path: Path) -> None:
 
     controls = ttk.Frame(top)
     controls.pack(fill="x", pady=(8, 0))
-    ttk.Button(controls, text="Новая Song", command=add_song).pack(side="left", padx=3)
-    ttk.Button(controls, text="Добавить Pattern WAV", command=add_pattern_ui).pack(side="left", padx=3)
-    ttk.Button(controls, text="Сохранить параметры", command=save_selected).pack(side="left", padx=3)
-    ttk.Button(controls, text="Удалить запись (не WAV)", command=delete_selected).pack(side="left", padx=3)
-    tap_button["widget"] = ttk.Button(controls, text="Tap ритм", command=tap_rhythm)
+    ttk.Button(controls, text="Новая Song", command=add_song, style="PPGU.DialogSecondary.TButton").pack(side="left", padx=3)
+    ttk.Button(controls, text="Добавить Pattern WAV", command=add_pattern_ui, style="PPGU.DialogSecondary.TButton").pack(side="left", padx=3)
+    ttk.Button(controls, text="Сохранить параметры", command=save_selected, style="PPGU.DialogPrimary.TButton").pack(side="left", padx=3)
+    ttk.Button(controls, text="Удалить запись (не WAV)", command=delete_selected, style="PPGU.DialogDanger.TButton").pack(side="left", padx=3)
+    tap_button["widget"] = ttk.Button(controls, text="Tap ритм", command=tap_rhythm, style="PPGU.DialogSecondary.TButton")
     tap_button["widget"].pack(side="left", padx=3)
-    ttk.Button(controls, text="Сброс Tap", command=reset_taps).pack(side="left", padx=3)
-    ttk.Button(controls, text="Rhythm Search", command=rhythm_search).pack(side="left", padx=3)
-    ttk.Button(controls, text="Закрыть", command=window.destroy).pack(side="right", padx=3)
+    ttk.Button(controls, text="Сброс Tap", command=reset_taps, style="PPGU.DialogSecondary.TButton").pack(side="left", padx=3)
+    ttk.Button(controls, text="Rhythm Search", command=rhythm_search, style="PPGU.DialogSecondary.TButton").pack(side="left", padx=3)
+    ttk.Button(controls, text="Закрыть", command=window.destroy, style="PPGU.DialogSecondary.TButton").pack(side="right", padx=3)
     refresh()

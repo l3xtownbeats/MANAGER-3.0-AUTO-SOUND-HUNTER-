@@ -57,3 +57,49 @@ The VST3 must define and document a non-overlapping pattern-selector range and p
 ## 7. Safety and source integrity
 
 Original library files remain read-only during scanning and analysis. No automatic move, rename, overwrite or deletion. Only manually reviewed WAV assets with explicit license approval may be promoted to FACTORY.
+
+## 8. Full-loop recordings and fragment extraction
+
+A complete original recording MAY be used as a Pattern performance when the selected section is already a stable, repeating pattern and can be looped without changing its musical content. Extracting a smaller loop fragment is optional, not mandatory.
+
+A full-loop asset is acceptable when all of the following are verified:
+- exact loop start/end sample positions are stored; a full-file loop may use start sample 0 and end sample equal to the file frame count;
+- loop end is after loop start and does not exceed the source/derived WAV frame count;
+- the loop point transition is verified to be seamless or musically clean, without a click, gap, duplicated attack, or rhythm discontinuity;
+- the repeated pattern remains unchanged from cycle to cycle;
+- beat grid, tempo/meter (or explicitly unknown values), attack/stroke events, technique/articulation events and harmonic/chord events are retained where supported;
+- source path, source SHA-256, exact sample boundaries and derived SHA-256 remain traceable.
+
+Extract a fragment only when a shorter, stable section is materially better for the instrument (for example, the full source contains an intro/fill/break or changing arrangement around the repeated phrase). Never split merely to force a loop where the full recording is already a valid repeating performance.
+
+A Pattern performance WAV is not automatically chromatic. Chord changes must be performed from reviewed pitch-specific note zones, chord voicings and event/timing data; do not pitch-shift one full-band loop to fake arbitrary chords.
+
+## 9. AutoChords and Pattern input when AutoChords is disabled
+
+AutoChords is an expanded PPGU feature, not a copy of the restricted chord choices of a third-party reference instrument.
+
+When AutoChords is ON:
+- the user selects a musical key/root and scale;
+- the instrument exposes the complete note set belonging to that selected key/scale, not merely a small fixed list of suggested chords;
+- scale degrees and the resulting diatonic chord choices must be visible and selectable;
+- the selected notes/chords must feed the Pattern chord/event engine and remain synchronized with the user's selected Pattern performance;
+- the display must provide musically correct enharmonic spellings where practical (for example, show flats in flat-oriented keys and sharps in sharp-oriented keys).
+
+When AutoChords is OFF:
+- Pattern remains fully playable from ordinary MIDI note input across the complete 12-note chromatic set;
+- all semitones are available, including C, C#/Db, D, D#/Eb, E, F, F#/Gb, G, G#/Ab, A, A#/Bb and B;
+- the UI must not filter, quantize or silently remap incoming notes to the currently selected scale;
+- flats/sharps are display spellings for the same MIDI pitches, not additional MIDI notes.
+
+The AutoChords key/scale UI and note/chord list are part of the user-facing performance workflow. Parameters for scale root/mode alone do not count as a completed AutoChords implementation. Completion requires MIDI behavior, visible list generation, correct note/chord output, state recall, and tests.
+
+## 10. Factory grouping and runtime mapping
+
+The Manager must keep the following as separate logical asset groups while allowing one physical WAV/asset to be referenced by more than one engine zone where appropriate:
+- Pattern performances: complete original loops or verified extracted loop fragments, preserving loop points, beat grid, timing, tempo/meter, attacks, strokes, articulation and harmonic events;
+- Pattern note/chord zones: reviewed pitch-specific single notes, chord voicings and articulations used to render the selected performance against the incoming chord;
+- Melody note zones: reviewed pitch-specific notes, key range, velocity range/layers, round-robin group and articulation;
+- Melody phrases: separately grouped melodic sequences with confirmed note events and phrase boundaries.
+
+The initial approved Pattern selector labels remain C1-F1 as listed above. Selector key labels must be calibrated against actual MIDI note numbers in the target host. Missing/unknown musical data remains unknown and must be displayed as a gap for review, not fabricated.
+

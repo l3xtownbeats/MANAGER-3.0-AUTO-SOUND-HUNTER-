@@ -9,6 +9,7 @@ def _catalog(assets_by_mode=None):
     assets_by_mode = assets_by_mode or {}
     return {
         "schema": "ppgu.plugin_asset_catalog/1.0.0",
+        "pattern_instrument_assets": [],
         "modes": [
             {"mode": mode, "assets": list(assets_by_mode.get(mode, []))}
             for mode in MODES
@@ -88,7 +89,10 @@ class LibraryStructureTests(unittest.TestCase):
         pattern = {
             "asset_id": "P2", "review_status": "REVIEWED",
             "license_status": "LICENSE_APPROVED", "integrity_status": "VERIFIED",
+            "asset_file": "staging/clips/pattern.wav", "frame_count": 48000,
             "musical_metadata": {"pattern_performance_review": {
+                "confirmed_pattern_selector_key": "C1",
+                "confirmed_pattern_name": "Pop Punk Downstroke",
                 "loop_start_sample": 0, "loop_end_sample": 48000,
                 "tempo_bpm": 170, "time_signature": "4/4",
                 "attack_events": [{"sample": 0, "stroke": "DOWNSTROKE"}],
@@ -101,6 +105,7 @@ class LibraryStructureTests(unittest.TestCase):
         melody = {
             "asset_id": "M2", "review_status": "REVIEWED",
             "license_status": "LICENSE_APPROVED", "integrity_status": "VERIFIED",
+            "asset_file": "staging/clips/melody.wav",
             "confirmed_note_sequence": [60, 62],
             "musical_metadata": {
                 "confirmed_note_sequence": [60, 62],
@@ -112,11 +117,14 @@ class LibraryStructureTests(unittest.TestCase):
                 "melody_mapping_verified": True,
             },
         }
-        result = build_library_structure(_catalog({
-            "PATTERN MODE": [pattern], "MELODY MODE": [melody],
-        }))
-        self.assertEqual(result["pattern_mode"]["assets"][0]["pattern_structure_status"], "STRUCTURE_VERIFIED")
+        catalog = _catalog({"MELODY MODE": [melody]})
+        catalog["pattern_instrument_assets"] = [pattern]
+        result = build_library_structure(catalog)
+        self.assertEqual(result["pattern_mode"]["performances"][0]["pattern_structure_status"], "STRUCTURE_VERIFIED")
+        self.assertEqual(result["pattern_mode"]["performances"][0]["loop_playback_mode"], "FULL_SOURCE_LOOP")
+        self.assertTrue(result["pattern_mode"]["performances"][0]["loop_content_unchanged"])
         self.assertEqual(result["melody_mode"]["assets"][0]["melody_structure_status"], "STRUCTURE_VERIFIED")
+        self.assertEqual(result["pattern_mode"]["selector_layout"][0]["selector_key"], "C1")
 
     def test_runtime_ready_requires_review_license_and_integrity(self):
         bad = {"asset_id": "X", "asset_file": "x.wav", "playable": True,
@@ -126,6 +134,92 @@ class LibraryStructureTests(unittest.TestCase):
         result = build_library_structure(_catalog({"SAMPLE MODE": [bad]}))
         self.assertEqual(result["modes"][0]["assets"][0]["runtime_ready"], False)
         self.assertEqual(validate_library_structure(result), [])
+
+    def test_pattern_instrument_performances_and_approved_selector_layout_are_indexed(self):
+        catalog = _catalog()
+        catalog["pattern_instrument_assets"] = [{
+            "asset_id": "PI1",
+            "kind": "rhythm_pattern",
+            "asset_file": "staging/clips/pattern.wav",
+            "manifest_file": "staging/manifests/pattern.json",
+            "frame_count": 48000,
+            "review_status": "REVIEWED",
+            "license_status": "LICENSE_APPROVED",
+            "integrity_status": "VERIFIED",
+            "musical_metadata": {
+                "pattern_performance_review": {
+                    "confirmed_pattern_selector_key": "C1",
+                    "confirmed_pattern_name": "Pop Punk Downstroke",
+                    "loop_start_sample": 0,
+                    "loop_end_sample": 48000,
+                    "tempo_bpm": 170,
+                    "time_signature": "4/4",
+                    "attack_events": [{"sample": 0, "stroke": "DOWNSTROKE"}],
+                    "beat_grid": [0, 12000, 24000, 36000],
+                    "technique_events": [{"sample": 0, "technique": "DOWNSTROKE"}],
+                    "harmonic_events": [{"sample": 0, "chord": "C5"}],
+                    "cycle_integrity_verified": True,
+                    "musical_review_verified": True,
+                }
+            },
+        }]
+        result = build_library_structure(catalog)
+        performance = result["pattern_mode"]["performances"][0]
+        self.assertEqual(performance["pattern_structure_status"], "STRUCTURE_VERIFIED")
+        self.assertEqual(performance["selector_key"], "C1")
+        self.assertEqual(result["pattern_mode"]["performance_structure_verified_count"], 1)
+        self.assertEqual(
+            [item["selector_key"] for item in result["pattern_mode"]["selector_layout"]],
+            ["C1", "C#1", "D1", "D#1", "E1", "F1"],
+        )
+        self.assertEqual(validate_library_structure(result), [])
+
+    def test_pattern_performance_without_selector_is_not_structure_verified(self):
+        catalog = _catalog()
+        catalog["pattern_instrument_assets"] = [{
+            "asset_id": "PI2",
+            "kind": "rhythm_pattern",
+            "asset_file": "staging/clips/pattern.wav",
+            "frame_count": 48000,
+            "review_status": "REVIEWED",
+            "license_status": "LICENSE_APPROVED",
+            "integrity_status": "VERIFIED",
+            "musical_metadata": {
+                "pattern_performance_review": {
+                    "loop_start_sample": 0, "loop_end_sample": 48000,
+                    "tempo_bpm": 170, "time_signature": "4/4",
+                    "attack_events": [{"sample": 0}],
+                    "beat_grid": [0, 12000, 24000, 36000],
+                    "technique_events": [{"sample": 0}],
+                    "harmonic_events": [{"sample": 0}],
+                    "cycle_integrity_verified": True,
+                    "musical_review_verified": True,
+                }
+            },
+        }]
+        result = build_library_structure(catalog)
+        item = result["pattern_mode"]["performances"][0]
+        self.assertEqual(item["pattern_structure_status"], "INCOMPLETE")
+        self.assertIn("confirmed_pattern_selector_key", item["missing_fields"])
+
+    def test_melody_single_note_is_a_note_zone_not_a_phrase(self):
+        note = {
+            "asset_id": "MN1",
+            "kind": "melody_single_note_candidate",
+            "asset_file": "staging/clips/melody-note.wav",
+            "review_status": "REVIEWED",
+            "license_status": "LICENSE_APPROVED",
+            "integrity_status": "VERIFIED",
+            "confirmed_midi_note": 60,
+            "playable": False,
+            "playable_in_mode": False,
+            "musical_metadata": {},
+        }
+        result = build_library_structure(_catalog({"MELODY MODE": [note]}))
+        item = result["melody_mode"]["assets"][0]
+        self.assertEqual(item["melody_structure_status"], "NOTE_ZONE_READY")
+        self.assertEqual(result["melody_mode"]["note_zone_ready_count"], 1)
+        self.assertEqual(result["melody_mode"]["phrase_count"], 0)
 
 
 if __name__ == "__main__":

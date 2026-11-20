@@ -39,6 +39,31 @@ jobs:
           python -m compileall -q .
           python -m unittest discover -v -p "test_*.py"
 
+      - name: Launch NEON STAGE from source and verify desktop shell
+        working-directory: LibraryManager
+        shell: pwsh
+        run: |
+          @'
+          import tkinter as tk
+          from manager_gui import LibraryManagerApp
+
+          root = tk.Tk()
+          try:
+              app = LibraryManagerApp(root)
+              root.update()
+              assert len(app._action_buttons) == 2, (
+                  f"Expected exactly 2 primary workflow actions, got {len(app._action_buttons)}"
+              )
+              assert "NEON STAGE DEFAULT" in root.title(), root.title()
+              assert app._progress_bar is not None
+              assert app.log is not None
+              print("NEON STAGE GUI source smoke-test: PASS")
+              print(f"Window title: {root.title()}")
+              print(f"Primary workflow actions: {len(app._action_buttons)}")
+          finally:
+              root.destroy()
+          '@ | python -
+
       - name: Build portable folder
         working-directory: LibraryManager
         run: |
@@ -80,6 +105,10 @@ jobs:
             Start-Sleep -Seconds 5
             $p.Refresh()
             if ($p.HasExited) { throw "Portable-mode app startup failed (code $($p.ExitCode))." }
+            if ($p.MainWindowHandle -eq [IntPtr]::Zero) { throw "Portable-mode app did not create its main window." }
+            if ($p.MainWindowTitle -notmatch "NEON STAGE DEFAULT") {
+              throw "Unexpected portable-mode window title: $($p.MainWindowTitle)"
+            }
             Stop-Process -Id $p.Id -Force
             Wait-Process -Id $p.Id -ErrorAction SilentlyContinue
           } finally {
@@ -171,6 +200,10 @@ jobs:
             Start-Sleep -Seconds 5
             $p.Refresh()
             if ($p.HasExited) { throw "Installed app startup failed (code $($p.ExitCode))." }
+            if ($p.MainWindowHandle -eq [IntPtr]::Zero) { throw "Installed app did not create its main window." }
+            if ($p.MainWindowTitle -notmatch "NEON STAGE DEFAULT") {
+              throw "Unexpected installed-mode window title: $($p.MainWindowTitle)"
+            }
             Stop-Process -Id $p.Id -Force
             Wait-Process -Id $p.Id -ErrorAction SilentlyContinue
           } finally {

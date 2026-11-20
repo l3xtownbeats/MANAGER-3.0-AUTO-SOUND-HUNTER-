@@ -224,6 +224,80 @@ class TransactionalDistributionTests(unittest.TestCase):
             )
         self.assertTrue(source.is_file())
 
+    def test_auto_distribution_skips_an_already_verified_factory_copy(self):
+        from library_operations import auto_distribute_approved, distribution_plan
+
+        # Use the full manifest fixture from the shared setup with real source,
+        # staged WAV and review/license evidence.
+        source, _ = self.sources[0]
+        manifest_dir = self.staging / "manifests"
+        manifest_dir.mkdir(parents=True)
+        record = {
+            "asset_id": "IDEMPOTENT-FACTORY-TEST",
+            "source_path": str(source.resolve()),
+            "source_sha256": self.entries[0]["source_sha256"],
+            "source_start_sample": 0,
+            "source_end_sample": 1,
+            "derived_path": str(source.resolve()),
+            "derived_sha256": self.entries[0]["source_sha256"],
+            "review_status": "REVIEWED",
+            "license_status": "LICENSE_APPROVED",
+            "review_validation": {
+                "source_sha256_verified": True,
+                "derived_sha256_verified": True,
+                "sample_boundaries_verified": True,
+                "explicit_musical_approval": True,
+                "explicit_license_approval": True,
+            },
+            "musical_metadata": {
+                "style_family": "POP_PUNK",
+                "instrument_family": "ELECTRIC_GUITAR",
+                "asset_role": "RHYTHM_PATTERN",
+                "tone_family": "CRUNCH",
+                "musical_review_notes": "Test approval.",
+                "license_evidence": "Test distribution permission.",
+            },
+        }
+        # This test only exercises idempotent duplicate detection before copy;
+        # use a plan stub so the destination and copied sidecar can be synthetic.
+        manifest = manifest_dir / "idempotent.json"
+        manifest.write_text(json.dumps(record), encoding="utf-8")
+        destination = (
+            self.samples / "FACTORY" / "POP_PUNK" / "WAV"
+            / "ELECTRIC_GUITAR" / "RHYTHM_PATTERN" / "CRUNCH" / "existing.wav"
+        )
+        destination.parent.mkdir(parents=True)
+        payload = b"verified-existing-factory-payload"
+        destination.write_bytes(payload)
+        digest = hashlib.sha256(payload).hexdigest().upper()
+        sidecar = destination.with_suffix(".wav.json")
+        sidecar.write_text(json.dumps({
+            "distributed_sha256": digest,
+            "distribution_status": "VERIFIED_COPIED",
+            "distributed_path": str(destination.resolve()),
+            "review_status": "REVIEWED",
+            "license_status": "LICENSE_APPROVED",
+        }), encoding="utf-8")
+        plan = {
+            "entries": [{
+                "manifest_path": str(manifest.resolve()),
+                "destination_path": str(destination.resolve()),
+                "source_sha256": digest,
+            }]
+        }
+
+        with patch("library_operations.distribution_plan", return_value=plan), \
+             patch("finalization.finalize_library", return_value={"factory_finalized": True}):
+            result = auto_distribute_approved(
+                self.samples, self.staging, approve=True, journal_path=self.journal,
+            )
+
+        self.assertEqual(result["already_present_count"], 1)
+        self.assertEqual(result["copied_count"], 0)
+        self.assertEqual(result["failed"], [])
+        self.assertTrue(destination.is_file())
+        self.assertEqual(destination.read_bytes(), payload)
+
 
 if __name__ == "__main__":
     unittest.main()
