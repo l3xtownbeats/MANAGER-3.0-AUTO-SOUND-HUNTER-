@@ -1203,13 +1203,15 @@ class LibraryManagerApp:
             def report_progress(message: str) -> None:
                 self._queue_progress(message)
 
-            report_progress("ЭТАП 1/8: быстрое сканирование структуры — только файловая метаинформация.")
-            quick_result = quick_scan(
-                samples, progress=report_progress, cancel_event=self._cancel_event,
-            )
-            if self._cancel_event.is_set():
-                raise RuntimeError("Полный цикл остановлен после быстрого сканирования.")
-            report_progress("ЭТАП 2/8: глубокая инвентаризация, SHA-256 cache, форматы, дубликаты и SFZ.")
+            # The deep inventory already performs a complete filesystem walk.
+            # Do not walk the same large library a second time just to create a
+            # preliminary CSV; this duplicate pass was pure overhead.
+            report_progress("ЭТАП 1/7: единый обход дерева + инвентаризация; отдельный повторный quick-scan пропущен.")
+            quick_result = {
+                "status": "MERGED_INTO_DEEP_INVENTORY",
+                "duplicate_tree_walk_skipped": True,
+            }
+            report_progress("ЭТАП 2/7: глубокая инвентаризация, SHA-256 cache, форматы, дубликаты и SFZ.")
             analysis_result = run_manager(
                 samples,
                 analyze_audio=analyze_audio,
@@ -1217,7 +1219,9 @@ class LibraryManagerApp:
                 write_virtual=bool(analyze_audio and guitar_confirmed),
                 progress=report_progress,
                 cancel_event=self._cancel_event,
-                workers=1,
+                # Two workers for metadata/hash-only scans; keep acoustic
+                # decoding single-worker on the user's dual-core / 8 GB PC.
+                workers=1 if analyze_audio else 2,
             )
 
             mode_counts = analysis_result.get("mode_candidate_counts", {})
@@ -1239,6 +1243,7 @@ class LibraryManagerApp:
             # Only candidates that already pass the existing review, license,
             # provenance, PCM and SHA-256 gates can be copied.
             incremental_factory = {
+                "known_manifests": set(),
                 "copied_count": 0,
                 "already_present_count": 0,
                 "flush_count": 0,
@@ -1254,9 +1259,20 @@ class LibraryManagerApp:
                     f"ПРОМЕЖУТОЧНАЯ ОТПРАВКА В FACTORY: {stage_label}. "
                     "Проверяю уже одобренные кандидаты, не дожидаясь завершения всего Scan Hunting."
                 )
+                manifest_dir = STAGING_ROOT / "manifests"
+                new_manifests = (
+                    sorted(path for path in manifest_dir.glob("*.json")
+                           if path not in incremental_factory["known_manifests"])
+                    if manifest_dir.is_dir() else []
+                )
+                incremental_factory["known_manifests"].update(new_manifests)
+                if not new_manifests:
+                    return
                 batch_result = auto_distribute_approved(
                     samples, STAGING_ROOT,
                     approve=True,
+                    manifest_paths=new_manifests,
+                    finalize=False,
                     journal_path=samples / "FACTORY" / "LibraryManagerReports" / "operations.jsonl",
                     cancel_event=self._cancel_event,
                     progress=report_progress,
