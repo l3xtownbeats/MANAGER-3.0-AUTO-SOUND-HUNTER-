@@ -188,6 +188,30 @@ def configure_neon_stage_ttk(style: Any, palette: dict[str, str] | None = None) 
         darkcolor=border,
     )
     style.configure("TSeparator", background=border)
+    style.configure(
+        "PPGU.DialogPrimary.TButton",
+        background=accent, foreground="#FFFFFF",
+        bordercolor=accent, lightcolor=accent, darkcolor=accent,
+        padding=(16, 8), font=("Segoe UI", 9, "bold"), relief="flat",
+    )
+    style.map(
+        "PPGU.DialogPrimary.TButton",
+        background=[("disabled", control_bg), ("pressed", glow), ("active", glow)],
+        foreground=[("disabled", disabled), ("pressed", "#FFFFFF"), ("active", "#FFFFFF")],
+        bordercolor=[("active", glow), ("focus", glow)],
+    )
+    style.configure(
+        "PPGU.DialogSecondary.TButton",
+        background=panel_alt, foreground=text,
+        bordercolor=border, lightcolor=border, darkcolor=border,
+        padding=(14, 8), font=("Segoe UI", 8, "bold"), relief="flat",
+    )
+    style.map(
+        "PPGU.DialogSecondary.TButton",
+        background=[("disabled", control_bg), ("pressed", control_face), ("active", control_face)],
+        foreground=[("disabled", disabled), ("active", glow)],
+        bordercolor=[("active", glow), ("focus", glow)],
+    )
 
 
 NEON_STAGE_THEME = load_neon_stage_theme()
