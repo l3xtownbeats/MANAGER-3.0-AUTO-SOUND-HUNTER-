@@ -120,9 +120,19 @@ jobs:
           path: LibraryManager/dist/POP_PUNK_GUITAR_LIBRARY_MANAGER-windows-x64.zip
           if-no-files-found: error
 
-      - name: Install Inno Setup compiler
+      - name: Prepare installed-mode package and install Inno Setup compiler
+        working-directory: LibraryManager
         shell: pwsh
-        run: choco install innosetup --yes --no-progress
+        run: |
+          # The Portable ZIP must retain portable.mode, but the installed build must not.
+          # Remove the marker only after the Portable archive has been created and uploaded.
+          $app = "dist/POP_PUNK_GUITAR_LIBRARY_MANAGER"
+          $portableMarker = Join-Path $app "portable.mode"
+          if (!(Test-Path $portableMarker)) { throw "Portable marker missing before installer staging." }
+          Remove-Item $portableMarker -Force
+          if (Test-Path $portableMarker) { throw "Portable marker was not removed from installer staging." }
+
+          choco install innosetup --yes --no-progress
 
       - name: Build and smoke-test Windows installer
         working-directory: LibraryManager
@@ -147,6 +157,12 @@ jobs:
 
           $installedExe = Join-Path $installDir "POP_PUNK_GUITAR_LIBRARY_MANAGER.exe"
           if (!(Test-Path $installedExe)) { throw "Silent installer did not place the GUI executable." }
+          if (Test-Path (Join-Path $installDir "portable.mode")) {
+            throw "Installed package contains portable.mode and would use the wrong data root."
+          }
+
+          $installedData = Join-Path $env:LOCALAPPDATA "POP PUNK GUITAR Library Manager"
+          if (Test-Path $installedData) { Remove-Item $installedData -Recurse -Force }
 
           $oldPath = $env:PATH
           try {
@@ -161,7 +177,6 @@ jobs:
             $env:PATH = $oldPath
           }
 
-          $installedData = Join-Path $env:LOCALAPPDATA "POP PUNK GUITAR Library Manager"
           if (!(Test-Path $installedData -PathType Container)) {
             throw "Installed mode did not create persistent LocalAppData."
           }
