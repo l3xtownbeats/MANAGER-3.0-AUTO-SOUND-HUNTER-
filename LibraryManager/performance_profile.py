@@ -38,7 +38,7 @@ def resolve_fast_cache_dir(fallback: Path) -> Path:
     """
     local_app_data = os.environ.get("LOCALAPPDATA") if os.name == "nt" else None
     root = (Path(local_app_data) / _CACHE_FOLDER_NAME / "Cache"
-            if local_app_data else Path(fallback) / "Cache")
+            if local_app_data else Path(fallback))
     root.mkdir(parents=True, exist_ok=True)
     return root.resolve()
 
