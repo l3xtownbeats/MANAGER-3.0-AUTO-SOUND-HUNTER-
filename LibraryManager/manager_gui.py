@@ -1221,7 +1221,9 @@ class LibraryManagerApp:
                 cancel_event=self._cancel_event,
                 # Two workers for metadata/hash-only scans; keep acoustic
                 # decoding single-worker on the user's dual-core / 8 GB PC.
-                workers=1 if analyze_audio else 2,
+                # Keep both physical cores busy; work remains bounded to
+                # two in-flight files to protect the 8 GB RAM budget.
+                workers=2,
             )
 
             mode_counts = analysis_result.get("mode_candidate_counts", {})
@@ -1242,8 +1244,15 @@ class LibraryManagerApp:
             # Incremental FACTORY flush: do not wait for the complete scan.
             # Only candidates that already pass the existing review, license,
             # provenance, PCM and SHA-256 gates can be copied.
+            existing_manifest_dir = STAGING_ROOT / "manifests"
+            existing_manifests = (
+                set(existing_manifest_dir.glob("*.json"))
+                if existing_manifest_dir.is_dir() else set()
+            )
             incremental_factory = {
-                "known_manifests": set(),
+                # Existing queue is handled by the final catch-up pass; only
+                # manifests created during this scan enter incremental batches.
+                "known_manifests": existing_manifests,
                 "copied_count": 0,
                 "already_present_count": 0,
                 "flush_count": 0,
