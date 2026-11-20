@@ -164,9 +164,9 @@ def _frame_levels(source: Path, window_ms: int, hop_ms: int) -> tuple[list[dict[
                         "zcr": float(zcr),
                     })
                 next_start = int(starts[-1]) + hop
-                discard = next_start - combined_start
+                discard = min(len(combined), max(0, next_start - combined_start))
                 buffer = combined[discard:]
-                buffer_start = next_start
+                buffer_start = combined_start + discard
             else:
                 buffer = combined
 
