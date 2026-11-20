@@ -40,6 +40,7 @@ from library_operations import (
 from ppgu_theme import NEON_STAGE_THEME, resource_path, configure_neon_stage_ttk
 from performance_profile import (
     apply_windows_resource_limits, performance_profile_text,
+    recommended_scan_workers,
 )
 
 APP_VERSION = "3.0.0"
@@ -143,6 +144,28 @@ class LibraryManagerApp:
             background=[("disabled", control_face), ("pressed", accent_glow), ("active", accent_glow)],
             foreground=[("disabled", disabled)],
             bordercolor=[("active", accent_glow)],
+        )
+        style.configure(
+            "PPGU.Scan.TButton",
+            background=accent_purple,
+            foreground="#FFFFFF",
+            bordercolor=accent_purple,
+            lightcolor=accent_magenta,
+            darkcolor=accent_purple,
+            padding=(14, 10),
+            font=("Segoe UI", 9, "bold"),
+            relief="flat",
+        )
+        style.map(
+            "PPGU.Scan.TButton",
+            background=[("disabled", control_face), ("pressed", accent_magenta), ("active", accent_magenta)],
+            foreground=[("disabled", disabled), ("active", "#FFFFFF")],
+            bordercolor=[("active", accent_magenta)],
+        )
+        style.configure(
+            "PPGU.Horizontal.TProgressbar",
+            background=accent_glow, troughcolor=control_bg,
+            bordercolor=border, lightcolor=accent_glow, darkcolor=accent,
         )
         style.configure(
             "PPGU.Danger.TButton",
@@ -519,10 +542,20 @@ class LibraryManagerApp:
         self._cancel_button.pack(side="right", padx=(8, 0))
 
         self._write(
-            "NEON STAGE DEFAULT / SKIN-1 загружена из темы PPGU.\n"
-            "На главном экране — шесть рабочих этапов; вспомогательные инструменты находятся в меню своих разделов.\n"
-            "Оригиналы read-only. В FACTORY допускаются только REVIEWED + LICENSE_APPROVED + VERIFIED материалы.\n"
+            "NEON STAGE DEFAULT / SKIN-1 загружена. Главные операции: IMPORT SAMPLE GUITAR + START SCAN HUNTING.\n"
+            "Все дополнительные инструменты и этапы сохранены в меню разделов.\n"
+            "Оригиналы READ-ONLY. FACTORY: REVIEWED + LICENSE_APPROVED + VERIFIED.\n"
         )
+        if self._resource_limits.get("applied"):
+            self._write(
+                f"[PERFORMANCE] Windows limits enforced: CPU <= {self._resource_limits['cpu_limit_percent']}%, "
+                f"process RAM <= {self._resource_limits['process_memory_limit_gb']} GB."
+            )
+        else:
+            self._write(
+                "[PERFORMANCE] Windows hard limits were not applied: "
+                + str(self._resource_limits.get("reason", "using bounded worker profile"))
+            )
 
     def _copy_log_text(self, value: str) -> None:
         if not value:
@@ -663,6 +696,8 @@ class LibraryManagerApp:
             return
 
         self._job_running = True
+        self._scan_progress_value.set(0.0)
+        self._scan_progress_message.set(title.upper() + "  /  ЗАПУСК")
         self._cancel_event.clear()
         self._active_task_title = title
         task_id = self._task_journal.start(
@@ -738,6 +773,7 @@ class LibraryManagerApp:
                         button.configure(state="normal")
                     self._write("[ОСТАНОВЛЕНО] " + json.dumps(result, ensure_ascii=False, indent=2, default=str))
                     self.status.set(title + ": остановлено; частичные отчёты сохранены")
+                    self._scan_progress_message.set("STOPPED  /  ЧАСТИЧНЫЕ ОТЧЁТЫ СОХРАНЕНЫ")
                 elif kind == "error":
                     _, title, error_text, details = event
                     self._job_running = False
@@ -760,6 +796,8 @@ class LibraryManagerApp:
 
     def _finish(self, title: str, result) -> None:
         self._write(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        self._scan_progress_value.set(100.0)
+        self._scan_progress_message.set("COMPLETE  /  " + title.upper())
         self.status.set(title + ": завершено")
 
     def _error(self, title: str, exc: Exception, details: str) -> None:
@@ -914,14 +952,14 @@ class LibraryManagerApp:
                 write_virtual=False,
                 progress=report_progress,
                 cancel_event=self._cancel_event,
-                workers=1,
+                workers=recommended_scan_workers(),
             )
             return {
                 "quick_scan": quick_result,
                 "deep_inventory": deep_result,
                 "acoustic_analysis_performed": False,
                 "physical_extraction_performed": False,
-                "workers": 1,
+                "workers": recommended_scan_workers(),
                 "source_files_modified": False,
             }
 
@@ -1205,6 +1243,12 @@ class LibraryManagerApp:
         self._background("Полный цикл подготовки библиотеки", work)
 
     def _progress(self, message: str) -> None:
+        self._scan_progress_message.set(message[:180])
+        match = re.search(r"Обработка:\\s*([\\d,]+)\\s*/\\s*([\\d,]+)", message)
+        if match:
+            completed = int(match.group(1).replace(",", ""))
+            total = max(1, int(match.group(2).replace(",", "")))
+            self._scan_progress_value.set(min(99.0, completed * 100.0 / total))
         self._write("[ВЫПОЛНЯЕТСЯ] " + message)
         if self._active_task_id:
             try:
