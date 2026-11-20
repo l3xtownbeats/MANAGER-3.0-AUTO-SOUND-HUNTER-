@@ -119,6 +119,26 @@ class OtherAuditTests(unittest.TestCase):
             self.assertEqual(destination.read_text(encoding="utf-8"), "do not overwrite")
             self.assertTrue(source.is_file())
 
+    def test_library_metadata_and_manager_virtual_sidecars_are_not_routed_to_other(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Samples"
+            incoming = root / "Import Sample Guitar"
+            incoming.mkdir(parents=True)
+            (incoming / "LICENSE.txt").write_text("Redistribution terms", encoding="utf-8")
+            (incoming / "bank.json").write_text('{"libraryId":"test"}', encoding="utf-8")
+            virtual = incoming / "virtual_candidates"
+            virtual.mkdir()
+            (virtual / "candidate-001.json").write_text('{"manager":"sidecar"}', encoding="utf-8")
+
+            result = copy_unsupported_to_other(root)
+            self.assertEqual(result["copied_count"], 0)
+            self.assertEqual(result["candidates_seen"], 0)
+            self.assertTrue((incoming / "LICENSE.txt").is_file())
+            self.assertTrue((incoming / "bank.json").is_file())
+            self.assertTrue((virtual / "candidate-001.json").is_file())
+            self.assertFalse((root / "OTHER" / "LICENSE.txt").exists())
+            self.assertFalse((root / "OTHER" / "bank.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
