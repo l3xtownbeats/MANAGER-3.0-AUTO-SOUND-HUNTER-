@@ -111,7 +111,7 @@ class LibraryManagerApp:
         amber = "#FFC857"
         red = "#FF597C"
 
-        self.root.title("NEON STAGE  |  Library Manager")
+        self.root.title("PPGU Library Manager")
         self.root.geometry("1366x768")
         self.root.minsize(1080, 680)
         self.root.configure(bg=bg)
@@ -211,16 +211,12 @@ class LibraryManagerApp:
         deck.pack(fill="both", expand=True, padx=3, pady=3)
 
         # Top identity rail: real app status plus the approved product language.
-        top = VstPanel(deck, "NEON STAGE", tag="", accent=cyan)
+        top = VstPanel(deck, "PPGU", tag="", accent=cyan)
         top.pack(fill="x", padx=7, pady=(7, 6))
         top_row = tk.Frame(top.body, bg=inset)
         top_row.pack(fill="x")
         brand = tk.Frame(top_row, bg=inset)
         brand.pack(side="left", fill="x", expand=True)
-        tk.Label(
-            brand, text="PPGU",
-            bg=inset, fg="#FFFFFF", font=("Segoe UI", 18, "bold"),
-        ).pack(anchor="w", pady=2)
         self._operation_badge = NeonBadge(
             top_row, "IDLE  /  READY", color=green,
         )
@@ -299,7 +295,7 @@ class LibraryManagerApp:
         center = tk.Frame(workspace, bg=bg)
         center.pack(side="left", fill="both", expand=True, padx=(0, 6))
 
-        hero_panel = VstPanel(center, "SIGNAL FORGE", tag="", accent=cyan)
+        hero_panel = VstPanel(center, "", tag="", accent=cyan)
         hero_panel.pack(fill="x", pady=(0, 7))
         self._banner_photo = None
         try:
@@ -323,11 +319,11 @@ class LibraryManagerApp:
             )
             fallback.pack(fill="x")
             fallback.create_text(
-                18, 28, text="PPGU  /  NEON STAGE",
+                18, 28, text="PPGU",
                 anchor="w", fill=cyan, font=("Segoe UI", 20, "bold"),
             )
             fallback.create_text(
-                18, 66, text="POP PUNK GUITAR LIBRARY MANAGER",
+                18, 66, text="LIBRARY MANAGER",
                 anchor="w", fill=text, font=("Consolas", 11, "bold"),
             )
             fallback.create_text(
@@ -336,7 +332,7 @@ class LibraryManagerApp:
             )
 
         # TWO PRIMARY WORKFLOWS — keep the main screen focused on the two core actions.
-        actions_panel = VstPanel(center, "CONTROL", tag="", accent=cyan)
+        actions_panel = VstPanel(center, "", tag="", accent=cyan)
         actions_panel.pack(fill="x", pady=(0, 7))
         action_grid = tk.Frame(actions_panel.body, bg=inset)
         action_grid.pack(fill="x")
@@ -374,12 +370,12 @@ class LibraryManagerApp:
         right.pack_propagate(False)
 
         monitor_panel = VstPanel(
-            right, "TASK MONITOR", tag="LIVE", accent=cyan,
+            right, "", tag="", accent=cyan,
         )
         monitor_panel.pack(fill="x", pady=(0, 7))
         monitor_header = tk.Frame(monitor_panel.body, bg=inset)
         monitor_header.pack(fill="x")
-        self._progress_title = tk.StringVar(value="READY  /  ОЖИДАНИЕ")
+        self._progress_title = tk.StringVar(value="READY")
         self._progress_detail = tk.StringVar(
             value="READY"
         )
@@ -417,7 +413,7 @@ class LibraryManagerApp:
 
         # OPERATION LOG — actual messages from worker/main-thread activity.
         log_panel = VstPanel(
-            deck, "ACTIVITY",
+            deck, "",
             tag="", accent=blue,
         )
         log_panel.pack(fill="both", expand=True, padx=7, pady=(0, 6))
@@ -454,7 +450,7 @@ class LibraryManagerApp:
             fg=text, font=("Segoe UI", 8), anchor="w",
         ).pack(side="left", fill="x", expand=True)
 
-        self._write("NEON STAGE ready.")
+        self._write("PPGU Manager ready.")
 
     def _copy_log_text(self, value: str) -> None:
         if not value:
