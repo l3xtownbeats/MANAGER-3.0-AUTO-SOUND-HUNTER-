@@ -691,6 +691,9 @@ class LibraryManagerApp:
             self._task_journal.fail(task_id, title, f"{type(exc).__name__}: {exc}")
             self._job_running = False
             self._worker_thread = None
+            self._progress_bar.stop()
+            self._progress_title.set("ERROR  /  ОШИБКА")
+            self._progress_detail.set(f"{type(exc).__name__}: {exc}")
             for button in self._action_buttons:
                 button.configure(state="normal")
             details = traceback.format_exc()
@@ -759,7 +762,68 @@ class LibraryManagerApp:
                 pass
 
     def _finish(self, title: str, result) -> None:
-        self._write(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        """Write a compact result card; full machine reports stay in report files."""
+        def select_fields(value, fields):
+            if not isinstance(value, dict):
+                return value
+            return {key: value[key] for key in fields if key in value}
+
+        summary = {}
+        if isinstance(result, dict):
+            summary["quick_scan"] = select_fields(
+                result.get("quick_scan"),
+                ("files_found", "directories_scanned", "elapsed_seconds", "report_directory"),
+            )
+            summary["deep_analysis"] = select_fields(
+                result.get("deep_analysis"),
+                ("files_scanned", "wav_files", "sfz_files", "audio_files_analyzed",
+                 "mode_candidates_total", "errors", "report_directory", "workers"),
+            )
+            summary["physical_extraction"] = select_fields(
+                result.get("physical_extraction"),
+                ("long_recording_region_wav_count", "pattern_instrument_wav_count",
+                 "chord_and_power_chord_wav_count", "sample_mode_wav_count",
+                 "melody_mode_single_note_bindings", "melody_mode_phrase_wav_count",
+                 "total_new_wav_candidates", "manifest_count_in_staging", "review_status",
+                 "license_status"),
+            )
+            summary["factory_distribution"] = select_fields(
+                result.get("factory_distribution"),
+                ("status", "manifests_seen", "ready_count", "already_present_count",
+                 "copied_count", "journal_path", "finalization_error"),
+            )
+            summary["other_routing"] = select_fields(
+                result.get("other_routing"),
+                ("status", "candidates_seen", "copied_count", "already_present_count",
+                 "error_count"),
+            )
+            summary["plugin_asset_catalog"] = select_fields(
+                result.get("plugin_asset_catalog"),
+                ("asset_count", "playable_asset_count", "candidate_count", "status"),
+            )
+            summary["performance_manifest"] = select_fields(
+                result.get("performance_manifest"),
+                ("asset_binding_count", "event_count", "runtime_status"),
+            )
+            summary["source_files_modified"] = result.get("source_files_modified", False)
+            summary["source_files_moved_or_deleted"] = result.get("source_files_moved_or_deleted", False)
+
+        self._write("[ИТОГ SCAN HUNTING] " + json.dumps(
+            summary or result, ensure_ascii=False, default=str, separators=(",", ":")
+        ))
+        factory = result.get("factory_distribution", {}) if isinstance(result, dict) else {}
+        other = result.get("other_routing", {}) if isinstance(result, dict) else {}
+        candidates = result.get("physical_extraction", {}) if isinstance(result, dict) else {}
+        self._progress_title.set("COMPLETE  /  ЗАВЕРШЕНО")
+        self._progress_bar.stop()
+        self._progress_bar.configure(mode="determinate", value=100)
+        self._progress_detail.set(
+            f"Кандидатов WAV: {candidates.get('total_new_wav_candidates', 0)}  •  "
+            f"FACTORY: {factory.get('copied_count', 0)} новых / "
+            f"{factory.get('already_present_count', 0)} уже проверено  •  "
+            f"OTHER: {other.get('copied_count', 0)} копий / "
+            f"{other.get('error_count', 0)} ошибок"
+        )
         self.status.set(title + ": завершено")
 
     def _error(self, title: str, exc: Exception, details: str) -> None:
@@ -1147,6 +1211,14 @@ class LibraryManagerApp:
                     "error": "Физическое извлечение пропущено: оператор не подтвердил гитарный источник.",
                 })
 
+            report_progress(
+                "ИТОГ ИЗВЛЕЧЕНИЯ: длинные отрывки=" + str(extracted_region)
+                + "; Pattern WAV=" + str(extracted_pattern)
+                + "; Chord WAV=" + str(extracted_chord)
+                + "; Sample WAV=" + str(extracted_sample)
+                + "; Melody WAV=" + str(extracted_melody)
+                + "; ошибок=" + str(len(extraction_failures))
+            )
             if self._cancel_event.is_set():
                 raise RuntimeError("Полный цикл остановлен до финализации; исходные файлы не изменены.")
 
