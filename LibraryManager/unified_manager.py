@@ -32,7 +32,7 @@ from mode_sorter import build_mode_sorting_report
 from mode_assignment_index import build_mode_assignment_index
 from app_paths import resolve_runtime_paths, runtime_staging_root
 
-VERSION = "3.0.0-dev9"
+VERSION = "3.0.0"
 SUPPORTED = AUDIO_EXT | {".sfz"} | ARCHIVE_EXT
 # Non-audio production assets are excluded immediately from all scan/analyze queues.
 # Source files are never deleted or moved; this is an analysis-only filter.
