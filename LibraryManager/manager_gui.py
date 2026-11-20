@@ -1251,6 +1251,7 @@ class LibraryManagerApp:
                                 cancel_event=self._cancel_event,
                             )
                             extracted_chord += len(clips)
+                            flush_factory_batch("CHORD / текущая партия WAV")
                     except Exception as exc:
                         if self._cancel_event.is_set():
                             raise
