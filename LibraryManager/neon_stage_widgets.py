@@ -213,6 +213,9 @@ class NeonStageButton(tk.Canvas):
         self.create_line(right - 1, top + cut, right - 1, bottom - cut,
                          fill=_blend_hex(accent, "#000000", 0.38), width=2)
 
+        if self._state == "disabled":
+            self.create_polygon(points, fill="#000000", stipple="gray50", outline="")
+
         led_x = left + 22
         led_y = (top + bottom) / 2
         led_color = self._palette.get("text_disabled", "#788BA4") if muted else self._palette.get("accent_glow", "#00BFFF")
@@ -233,6 +236,4 @@ class NeonStageButton(tk.Canvas):
                          font=self._font, anchor="center")
         self.create_text(x, y, text=self._text, fill=text_color,
                          font=self._font, anchor="center")
-        if self._state == "disabled":
-            self.create_polygon(points, fill="#000000", stipple="gray50", outline="")
 
