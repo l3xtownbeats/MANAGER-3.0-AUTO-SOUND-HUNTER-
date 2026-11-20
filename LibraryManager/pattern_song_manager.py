@@ -262,26 +262,47 @@ def tap_intervals(tap_times_seconds: list[float]) -> list[float]:
     return [b - a for a, b in zip(times, times[1:])]
 
 
-def open_pattern_song_manager(parent, library_path: Path) -> None:
+def open_pattern_song_manager(parent, library_path: Path, *, dialogs=None) -> None:
     """Open a small Tk editor for Songs/Patterns metadata; never edits source WAVs."""
     import tkinter as tk
     import time
     from tkinter import filedialog, messagebox, simpledialog, ttk
 
+    showerror = dialogs.showerror if dialogs is not None else messagebox.showerror
+    showinfo = dialogs.showinfo if dialogs is not None else messagebox.showinfo
+    askyesno = dialogs.askyesno if dialogs is not None else messagebox.askyesno
+    askstring = dialogs.askstring if dialogs is not None else simpledialog.askstring
+
     path = Path(library_path)
     try:
         library = load_library(path)
     except Exception as exc:
-        messagebox.showerror("Pattern Song Manager", str(exc), parent=parent)
+        showerror("Pattern Song Manager", str(exc), parent=parent)
         return
 
-    window = tk.Toplevel(parent)
-    window.title("PPGU — Pattern Song Manager")
-    window.geometry("980x620")
-    window.transient(parent)
-
-    top = ttk.Frame(window, padding=10)
-    top.pack(fill="both", expand=True)
+    if dialogs is not None:
+        window, window_content, window_footer = dialogs.create_window(
+            "PATTERN SONG MANAGER",
+            "PATTERN LIBRARY  •  SONG GROUPS / KEY SWITCH / RHYTHM SEARCH",
+            "980x620",
+        )
+        top = ttk.Frame(window_content, padding=10)
+        top.pack(fill="both", expand=True)
+        ttk.Label(
+            window_footer,
+            text="METADATA ONLY  /  SOURCE WAV FILES ARE NEVER MODIFIED",
+        ).pack(side="left")
+        ttk.Button(
+            window_footer, text="ЗАКРЫТЬ",
+            style="PPGU.DialogSecondary.TButton", command=window.destroy,
+        ).pack(side="right")
+    else:
+        window = tk.Toplevel(parent)
+        window.title("PPGU — Pattern Song Manager")
+        window.geometry("980x620")
+        window.transient(parent)
+        top = ttk.Frame(window, padding=10)
+        top.pack(fill="both", expand=True)
     ttk.Label(top, text="PATTERN SONGS — группы паттернов по песням", font=("Segoe UI", 14, "bold")).pack(anchor="w")
     ttk.Label(top, text="Без time-stretch • Shift / End • Key Switch • Rhythm Search • Chord adaptation • Natural Doubling").pack(anchor="w", pady=(0, 8))
 
@@ -359,7 +380,7 @@ def open_pattern_song_manager(parent, library_path: Path) -> None:
     tree.bind("<<TreeviewSelect>>", select_item)
 
     def add_song():
-        name = simpledialog.askstring("Новая Song", "Название группы паттернов:", parent=window)
+        name = askstring("Новая Song", "Название группы паттернов:", parent=window)
         if not name:
             return
         style = simpledialog.askstring("Стиль", "Стиль/направление (необязательно):", parent=window) or ""
@@ -369,7 +390,7 @@ def open_pattern_song_manager(parent, library_path: Path) -> None:
     def add_pattern_ui():
         song = selected.get("song")
         if song is None:
-            messagebox.showinfo("Выбор Song", "Сначала выберите Song в дереве.", parent=window)
+            showinfo("Выбор Song", "Сначала выберите Song в дереве.", parent=window)
             return
         wav = filedialog.askopenfilename(parent=window, title="Выберите извлечённый Pattern WAV", filetypes=[("WAV", "*.wav")])
         if not wav:
@@ -457,7 +478,7 @@ def open_pattern_song_manager(parent, library_path: Path) -> None:
         pattern, song = selected.get("pattern"), selected.get("song")
         if pattern is None or song is None:
             return
-        if not messagebox.askyesno("Удалить запись", "Удалить только запись паттерна из Song? WAV-файл не удаляется.", parent=window):
+        if not askyesno("Удалить запись", "Удалить только запись паттерна из Song? WAV-файл не удаляется.", parent=window):
             return
         song["patterns"] = [p for p in song["patterns"] if p["pattern_id"] != pattern["pattern_id"]]
         selected.update(pattern=None)
