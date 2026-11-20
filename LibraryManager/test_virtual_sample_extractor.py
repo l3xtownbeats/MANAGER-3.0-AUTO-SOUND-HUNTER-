@@ -9,7 +9,8 @@ import wave
 from pathlib import Path
 
 from virtual_sample_extractor import (analyze_long_wav, analyze_pattern_ranges,
-                                      write_virtual_index, extract_virtual_ranges, STAGING_BASE)
+                                      write_virtual_index, extract_virtual_ranges,
+                                      _frame_levels, STAGING_BASE)
 
 
 def write_test_wav(path: Path, rate: int = 11025) -> None:
@@ -32,6 +33,21 @@ def write_test_wav(path: Path, rate: int = 11025) -> None:
 
 
 class VirtualSampleExtractorTests(unittest.TestCase):
+    def test_vectorized_frame_reader_preserves_exact_frame_grid_and_bounded_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "riff.wav"
+            write_test_wav(source)
+            levels, meta = _frame_levels(source, window_ms=20, hop_ms=10)
+            window = round(meta["sample_rate"] * 0.020)
+            hop = round(meta["sample_rate"] * 0.010)
+            expected = 1 + (meta["total_frames"] - window) // hop
+            self.assertEqual(len(levels), expected)
+            self.assertEqual(levels[0]["start_sample"], 0)
+            self.assertEqual(levels[-1]["end_sample"], levels[-1]["start_sample"] + window)
+            self.assertEqual(meta["total_frames"], meta["sample_rate"] * 3)
+            self.assertTrue(all(0.0 <= item["rms"] <= 1.0 for item in levels))
+            self.assertTrue(all(0.0 <= item["zcr"] <= 1.0 for item in levels))
+
     def test_requires_guitar_filter_confirmation(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "riff.wav"
