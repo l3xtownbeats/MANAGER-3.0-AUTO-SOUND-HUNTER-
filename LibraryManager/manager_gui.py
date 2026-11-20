@@ -111,7 +111,7 @@ class LibraryManagerApp:
         amber = "#FFC857"
         red = "#FF597C"
 
-        self.root.title("PPGU Library Manager")
+        self.root.title(f"{NEON_STAGE_THEME['name']} — PPGU Library Manager {APP_VERSION}")
         self.root.geometry("1366x768")
         self.root.minsize(1080, 680)
         self.root.configure(bg=bg)
