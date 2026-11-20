@@ -308,6 +308,7 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
     files are not re-read on subsequent runs. All source files are read-only.
     """
     import hashlib
+    import shutil
     import sqlite3
     import threading
     import time
@@ -379,8 +380,26 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
     emit("ЭТАП 2/4: параллельная инвентаризация, SHA-256 и метаданные. Кэш SHA-256 включён; исходники только читаются.")
 
     cache_db = resolve_fast_cache_dir(report_base) / "scan_cache.sqlite3"
-    con = sqlite3.connect(str(cache_db), timeout=30)
+    # Carry forward the user's existing SHA-256/audio cache from Manager 3.0
+    # on the library drive. This prevents an unnecessary full rehash after the
+    # cache is relocated from the HDD to the Windows system SSD.
+    legacy_cache = report_base / "scan_cache.sqlite3"
+    if cache_db != legacy_cache and not cache_db.exists() and legacy_cache.is_file():
+        try:
+            shutil.copy2(legacy_cache, cache_db)
+            emit(f"Кэш сканирования перенесён на быстрый диск: {cache_db}")
+        except OSError as cache_error:
+            emit(
+                "ПРЕДУПРЕЖДЕНИЕ: не удалось перенести старый кэш на SSD; "
+                f"использую прежний файл кэша: {cache_error}"
+            )
+            cache_db = legacy_cache
+    con = sqlite3.connect(str(cache_db), timeout=60)
     con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA synchronous=NORMAL")
+    con.execute("PRAGMA temp_store=MEMORY")
+    con.execute("PRAGMA cache_size=-32768")
+    con.execute("PRAGMA mmap_size=268435456")
     con.execute("""CREATE TABLE IF NOT EXISTS file_hash_cache (
         path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL,
         sha256 TEXT NOT NULL, updated_utc TEXT NOT NULL)""")
