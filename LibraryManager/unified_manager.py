@@ -20,6 +20,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from audio_analysis import analyse_wav, read_mono_pcm
+from performance_profile import (
+    AUDIO_ANALYSIS_SAMPLE_LIMIT, HASH_READ_BLOCK_BYTES,
+    recommended_scan_workers, resolve_fast_cache_dir,
+)
 from asset_classifier import classify_wav
 from library_manager import AUDIO_EXT, ARCHIVE_EXT, EXCLUDED_LABEL_RE, infer_labels, sha256_file, wav_info
 from pattern_pipeline import build_pattern_report
@@ -306,6 +310,7 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
     import hashlib
     import sqlite3
     import threading
+    import time
     from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
     samples_root = resolve_samples_root(samples_root)
@@ -373,7 +378,7 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
     emit("ЭТАП 1/4: быстрый обход дерева и подсчёт файлов завершён.")
     emit("ЭТАП 2/4: параллельная инвентаризация, SHA-256 и метаданные. Кэш SHA-256 включён; исходники только читаются.")
 
-    cache_db = report_base / "scan_cache.sqlite3"
+    cache_db = resolve_fast_cache_dir(report_base) / "scan_cache.sqlite3"
     con = sqlite3.connect(str(cache_db), timeout=30)
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("""CREATE TABLE IF NOT EXISTS file_hash_cache (
@@ -416,7 +421,7 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
             while True:
                 if cancel_event is not None and cancel_event.is_set():
                     raise RuntimeError("Анализ остановлен пользователем.")
-                block = stream.read(4 * 1024 * 1024)
+                block = stream.read(HASH_READ_BLOCK_BYTES)
                 if not block:
                     break
                 h.update(block)
@@ -499,10 +504,10 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
                             classification = json.loads(cached_pair[1])
                             cache_status = "HIT"
                         except (TypeError, ValueError, json.JSONDecodeError):
-                            decoded = read_mono_pcm(path, max_samples=90_000)
-                            acoustic = analyse_wav(path, max_samples=90_000, decoded=decoded)
+                            decoded = read_mono_pcm(path, max_samples=AUDIO_ANALYSIS_SAMPLE_LIMIT)
+                            acoustic = analyse_wav(path, max_samples=AUDIO_ANALYSIS_SAMPLE_LIMIT, decoded=decoded)
                             classification = classify_wav(
-                                path, analyze_pitch=True, max_samples=90_000, decoded=decoded
+                                path, analyze_pitch=True, max_samples=AUDIO_ANALYSIS_SAMPLE_LIMIT, decoded=decoded
                             )
                             cache_status = "REBUILT_CORRUPT_ENTRY"
                     else:
@@ -691,8 +696,7 @@ def run_manager(samples_root: Path, *, analyze_audio: bool = False,
 
     # The user's target machine has 4 logical processors. Two bounded workers
     # keep both CPU lanes supplied without unleashing many random HDD seeks.
-    default_workers = 2
-    worker_count = max(1, min(int(workers if workers is not None else default_workers), 2))
+    worker_count = recommended_scan_workers(workers)
     completed = 0
     pending = set()
     future_paths: dict[Any, Path] = {}
