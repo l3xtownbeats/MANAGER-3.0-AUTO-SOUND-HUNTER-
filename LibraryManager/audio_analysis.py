@@ -33,7 +33,7 @@ def _read_with_soundfile(path: Path, max_samples: int):
         values = []
         absolute = 0
         while True:
-            block = audio.read(65536, dtype="float32", always_2d=True)
+            block = audio.read(131072, dtype="float32", always_2d=True)
             if block.size == 0: break
             mono = block.mean(axis=1, dtype=np.float64)
             first = (-absolute) % hop
@@ -179,7 +179,7 @@ def analyse_wav(path: Path, frame_ms: int = 20, hop_ms: int = 10,
         "analysis_version":"0.4.0","source":str(Path(path).resolve()),
         "duration_seconds":round(frames/rate,6),"sample_rate":rate,"channels":channels,
         "sample_width_bytes":width,"container_format":fmt,"codec_subtype":subtype,
-        "decoder_backend":backend,"analysis_decimation":decimation,"analysis_sample_cap":max_samples,"decoder_block_frames":65536,
+        "decoder_backend":backend,"analysis_decimation":decimation,"analysis_sample_cap":max_samples,"decoder_block_frames":131072,
         "level":{"peak":round(peak,6),"mean_frame_rms":round(mean_rms,6),"rms_min":round(min(rms),6),"rms_max":round(max(rms),6)},
         "zero_crossing_rate_mean":round(statistics.fmean(zcr),6),"tempo_candidate_bpm":tempo,
         "dominant_pitch_candidate":pitch,"onset_evidence_seconds":onset_candidates,
