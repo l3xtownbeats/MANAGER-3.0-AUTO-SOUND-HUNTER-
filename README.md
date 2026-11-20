@@ -34,7 +34,8 @@ Samples/
 RUN_LIBRARY_MANAGER.bat
 ```
 
-Полная инструкция пользователя: [LibraryManager/PORTABLE_USER_GUIDE_RU.md](LibraryManager/PORTABLE_USER_GUIDE_RU.md).
+Полная инструкция пользователя: [LibraryManager/PORTABLE_USER_GUIDE_RU.md](LibraryManager/PORTABLE_USER_GUIDE_RU.md).  
+Release notes: [LibraryManager/V3_0_RELEASE_NOTES_RU.md](LibraryManager/V3_0_RELEASE_NOTES_RU.md).
 
 ## Сборка Portable для Windows x64
 
@@ -56,6 +57,6 @@ Manager ведёт подготовку библиотеки через этап
 
 Подробная утверждённая база находится в [PROJECT_BASELINE_RU.md](LibraryManager/PROJECT_BASELINE_RU.md), решения — в [PROJECT_DECISION_LOG_RU.md](LibraryManager/PROJECT_DECISION_LOG_RU.md), ход задач — в [TASK_JOURNAL_RU.md](LibraryManager/TASK_JOURNAL_RU.md).
 
-## Текущий статус переноса
+## Статус версии 3.0.0
 
-Рабочая линия Manager 3.0.0-dev9 перенесена на отдельную интеграционную ветку для проверки. Пакетные и регрессионные тесты должны пройти на точном commit этой ветки. До этого Portable ZIP не объявляется релизным; ручная проверка на реальной Windows 10 x64 системе пользователя также остаётся отдельным этапом.
+Автоматические release gates пройдены на commit `276907006060ed8057a371f41b66d59e22f36f8f`: 239/239 regression tests на Linux и Windows, сборка Portable ZIP, проверка ресурсов/архива, запуск Portable, сборка Inno Setup Installer, запуск установленного приложения и проверка LocalAppData. Номер версии GUI, unified manager и installer metadata выровнен на `3.0.0`; после этого versioned commit проходит повторный exact-head CI. Результаты и границы приёмки — в [V3_0_RELEASE_NOTES_RU.md](LibraryManager/V3_0_RELEASE_NOTES_RU.md). Проверка реальной пользовательской папки Samples остаётся отдельным этапом после установки.
