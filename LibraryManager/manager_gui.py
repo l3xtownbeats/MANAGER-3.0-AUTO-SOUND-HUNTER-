@@ -1002,7 +1002,7 @@ class LibraryManagerApp:
                 write_virtual=bool(analyze_audio and guitar_confirmed),
                 progress=report_progress,
                 cancel_event=self._cancel_event,
-                workers=1,
+                workers=recommended_scan_workers(),
             )
 
             mode_counts = analysis_result.get("mode_candidate_counts", {})
@@ -1646,7 +1646,7 @@ class LibraryManagerApp:
         self._background("Извлечение ритм-паттернов", work)
 
     def open_review_queue(self) -> None:
-        """List staged WAV manifests awaiting independent musical/license review."""
+        """List every staged WAV candidate in the unified approval queue."""
         manifests = sorted((STAGING_ROOT / "manifests").glob("*.json"))
         rows = []
         for path in manifests:
@@ -1662,7 +1662,7 @@ class LibraryManagerApp:
                 rows.append((path, "INVALID_MANIFEST", "ERROR", "ERROR", ""))
 
         window = tk.Toplevel(self.root)
-        window.title("Очередь ручной проверки — Staging")
+        window.title("ОЧЕРЕДЬ ОДОБРЕНИЯ  /  NEON STAGE")
         window.geometry("960x460")
         window.configure(bg=NEON_STAGE_THEME["palette"]["window_bg"])
         window.transient(self.root)
@@ -1683,7 +1683,12 @@ class LibraryManagerApp:
             tree_id = tree.insert("", "end", values=(kind, review, license_status, duration, path.name))
             paths[tree_id] = path
 
-        ttk.Label(frame, text=f"Манифестов: {len(rows)}. Музыкальная проверка и лицензия подтверждаются отдельно.").pack(anchor="w", pady=6)
+        pending_count = sum(1 for row in rows if row[2] != "REVIEWED" or row[3] != "LICENSE_APPROVED")
+        ttk.Label(
+            frame,
+            text=f"Кандидатов в очереди одобрения: {len(rows)}  •  Ожидают решения: {pending_count}. "
+                 "Сканирование и классификация не блокируются статусом лицензии; каждый статус виден отдельно.",
+        ).pack(anchor="w", pady=6)
 
         def selected_manifest() -> Path | None:
             selection = tree.selection()
