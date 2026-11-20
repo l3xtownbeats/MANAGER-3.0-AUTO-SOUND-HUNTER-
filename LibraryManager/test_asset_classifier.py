@@ -4,7 +4,9 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
+from unittest.mock import patch
 
+from audio_analysis import read_mono_pcm
 from asset_classifier import classify_wav
 
 def write_signal(path, seconds, signal_fn, rate=11025):
@@ -72,6 +74,16 @@ class AssetClassifierTests(unittest.TestCase):
             result=classify_wav(p)
             self.assertEqual(result["asset_kind_candidate"], "SAMPLE")
             self.assertFalse(result["loop_candidate"])
+
+    def test_reuses_shared_decoded_audio_for_classification_and_pitch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"tone.wav"
+            write_signal(path, 0.8, lambda t: 0.45*math.sin(2*math.pi*440*t))
+            decoded=read_mono_pcm(path, max_samples=90_000)
+            with patch("asset_classifier.read_mono_pcm", side_effect=AssertionError("classifier re-read WAV")), \
+                 patch("pitch_events.read_mono_pcm", side_effect=AssertionError("pitch tracker re-read WAV")):
+                result=classify_wav(path, decoded=decoded)
+            self.assertEqual(result["review_status"], "NEEDS_MUSICAL_REVIEW")
 
     def test_silence_is_unknown(self):
         with tempfile.TemporaryDirectory() as tmp:
