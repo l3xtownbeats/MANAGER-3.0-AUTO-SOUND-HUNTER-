@@ -143,8 +143,9 @@ class NeonStageDialogs:
         window.transient(master)
         # The modal is intentionally a compact console panel, not a system
         # MessageBox; all copy remains selectable and keyboard accessible.
-        content.configure(padx=18, pady=16)
-        return window, content, footer, master
+        inner = tk.Frame(content, bg=self.palette["panel"])
+        inner.pack(fill="both", expand=True, padx=18, pady=16)
+        return window, inner, footer, master
 
     def _finish_modal(self, window: tk.Toplevel, master: tk.Misc) -> None:
         window.bind("<Escape>", lambda _event: window.destroy())
