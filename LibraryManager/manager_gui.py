@@ -269,7 +269,10 @@ class LibraryManagerApp:
         )
         menu_bar.add_cascade(label="НАСТРОЙКИ", menu=settings_menu)
 
-        outer = tk.Frame(self.root, bg=bg)
+        outer = tk.Frame(
+            self.root, bg=bg, highlightbackground=accent_glow,
+            highlightthickness=1, bd=3, relief="ridge",
+        )
         outer.pack(fill="both", expand=True, padx=20, pady=16)
 
         # Premium brand header, using the actual PPGU NEON STAGE hero asset.
@@ -310,8 +313,8 @@ class LibraryManagerApp:
             self._skin_hero = None
 
         version = tk.Frame(
-            header, bg=panel_alt, highlightbackground=border,
-            highlightthickness=1, padx=14, pady=10,
+            header, bg=panel_alt, highlightbackground=accent_glow,
+            highlightthickness=2, bd=3, relief="raised", padx=14, pady=10,
         )
         version.pack(side="right", anchor="n")
         tk.Label(
